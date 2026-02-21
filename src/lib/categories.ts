@@ -1,0 +1,15 @@
+export const DEFAULT_CATEGORIES = [
+  "ATM Withdrawal",
+  "Bills & Utilities",
+  "Credit Card Payment",
+  "Education",
+  "Entertainment",
+  "Food & Dining",
+  "Groceries",
+  "Health & Fitness",
+  "Other",
+  "Shopping",
+  "Transfer",
+  "Transportation",
+  "Travel",
+];

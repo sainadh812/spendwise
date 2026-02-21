@@ -1,0 +1,31 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Category {
+  id   String @id @default(uuid())
+  name String @unique
+}
+
+model Transaction {
+  id               String   @id @default(uuid())
+  amount           Float
+  merchant         String
+  date             DateTime
+  category         String
+  is_cc_payment    Boolean  @default(false)
+  confidence_score Float
+  needs_review     Boolean  @default(true)
+  email_message_id String?  @unique
+  source           String   @default("email")
+  created_at       DateTime @default(now())
+  updated_at       DateTime @updatedAt
+
+  @@index([amount, merchant, date], name: "idx_dedup")
+}

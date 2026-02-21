@@ -1,64 +1,172 @@
-import Image from "next/image";
+import { auth, signOut } from "@/lib/auth";
+import { redirect } from "next/navigation";
+import { getTransactions, getCategories } from "./actions";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { CategoryPieChart, DailyBarChart } from "@/components/charts";
+import { PendingReviews } from "@/components/pending-reviews";
+import { TransactionTable } from "@/components/transaction-table";
+import { SeedButton } from "@/components/seed-button";
+import { MonthSwitcher } from "@/components/month-switcher";
+import { AddTransactionDialog } from "@/components/add-transaction-dialog";
 
-export default function Home() {
+function formatINR(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+export default async function Dashboard({
+  searchParams,
+}: {
+  searchParams: Promise<{ month?: string; year?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+
+  const params = await searchParams;
+  const now = new Date();
+  const month =
+    params.month !== undefined ? parseInt(params.month, 10) : now.getMonth();
+  const year =
+    params.year !== undefined ? parseInt(params.year, 10) : now.getFullYear();
+
+  const [transactions, categories] = await Promise.all([
+    getTransactions(month, year),
+    getCategories(),
+  ]);
+
+  const totalSpend = transactions
+    .filter((t) => !t.is_cc_payment)
+    .reduce((sum, t) => sum + t.amount, 0);
+
+  const totalTransactions = transactions.filter(
+    (t) => !t.is_cc_payment
+  ).length;
+  const pendingReviews = transactions.filter((t) => t.needs_review).length;
+  const avgTransaction =
+    totalTransactions > 0 ? totalSpend / totalTransactions : 0;
+
+  const serialized = transactions.map((t) => ({
+    ...t,
+    date: t.date.toISOString(),
+  }));
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div className="min-h-screen bg-background">
+      <header className="border-b">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
+          <h1 className="text-xl font-bold">Expense Tracker</h1>
+          <div className="flex items-center gap-3">
+            <AddTransactionDialog categories={categories} />
+            <form
+              action={async () => {
+                "use server";
+                await signOut({ redirectTo: "/login" });
+              }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              <Button variant="outline" size="sm" type="submit">
+                Sign Out
+              </Button>
+            </form>
+          </div>
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+      </header>
+
+      <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1">
+            <MonthSwitcher month={month} year={year} />
+            <p className="text-sm text-muted-foreground">
+              Monthly spending overview
+            </p>
+          </div>
+          {process.env.NODE_ENV !== "production" && <SeedButton />}
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Total Monthly Spend
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{formatINR(totalSpend)}</p>
+              <p className="text-xs text-muted-foreground">
+                Excludes credit card payments
+              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Transactions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{totalTransactions}</p>
+              <p className="text-xs text-muted-foreground">This month</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Avg Transaction
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{formatINR(avgTransaction)}</p>
+              <p className="text-xs text-muted-foreground">Per transaction</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Pending Reviews
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-2xl font-bold">{pendingReviews}</p>
+              <p className="text-xs text-muted-foreground">
+                Need your attention
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <CategoryPieChart transactions={serialized} />
+          <DailyBarChart transactions={serialized} />
+        </div>
+
+        <Separator />
+
+        <Tabs defaultValue="reviews">
+          <TabsList>
+            <TabsTrigger value="reviews">Pending Reviews</TabsTrigger>
+            <TabsTrigger value="all">All Transactions</TabsTrigger>
+          </TabsList>
+          <TabsContent value="reviews" className="mt-4">
+            <PendingReviews
+              transactions={serialized}
+              categories={categories}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          </TabsContent>
+          <TabsContent value="all" className="mt-4">
+            <TransactionTable
+              transactions={serialized}
+              categories={categories}
+            />
+          </TabsContent>
+        </Tabs>
       </main>
     </div>
   );

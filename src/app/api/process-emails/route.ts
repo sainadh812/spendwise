@@ -21,28 +21,37 @@ const BANK_EMAIL_QUERY = [
 ].join(" ");
 
 const AI_PROMPT = `You are a financial transaction parser for Indian bank alert emails.
-Your job is to extract DEBIT (money going out) transactions ONLY.
+Your job is to extract DEBIT (money going out) transactions — any transaction where money leaves the account.
 
-CRITICAL — set confidence_score to 0.0 and skip if the email is ANY of these:
+CRITICAL — set confidence_score to 0.0 and skip ONLY if the email is one of these:
 - A CREDIT/refund alert (money coming IN, e.g. "credited to your account", "received", "refund processed")
 - A marketing/promotional email
 - An OTP or verification code
 - A monthly statement or summary
 - A balance update without a specific debit transaction
-- Any email that is NOT a debit/spending/purchase alert
+
+IMPORTANT — the following ARE valid debits and must NOT be skipped:
+- Transfers to investment/trading platforms, mutual funds, SIPs, brokerages
+- Insurance premium payments
+- Loan EMI payments
+- Transfers to savings accounts, fixed deposits, PPF, NPS
+- UPI/NEFT/IMPS/RTGS transfers to any recipient
+- Bill payments, subscriptions, recharges
+- ATM withdrawals
+If money left the account, it is a debit — extract it regardless of the purpose.
 
 How to distinguish DEBIT vs CREDIT:
-- DEBIT keywords: "debited", "spent", "paid", "purchased", "charged", "withdrawn", "debit alert"
+- DEBIT keywords: "debited", "spent", "paid", "purchased", "charged", "withdrawn", "debit alert", "transferred"
 - CREDIT keywords: "credited", "received", "refund", "cashback credited", "credit alert"
 - If the email says "credited to your account" — this is a CREDIT, set confidence_score to 0.0
 
-Extraction rules (only if this is a genuine DEBIT alert):
+Extraction rules:
 - amount: The debited amount in INR. Look for "Rs.", "INR", "Rs" followed by a number.
 - merchant: The merchant/payee name.
   - HDFC: usually after "at" or "to" (e.g. "at SWIGGY" or "to JOHN DOE")
   - IDFC FIRST Bank: usually after "spent at" or "paid to"
 - date: Transaction date in ISO 8601 format. Parse from email body, or fall back to today.
-- category: Best-guess from: Food & Dining, Groceries, Transportation, Shopping, Entertainment, Bills & Utilities, Health & Fitness, Travel, Education, Credit Card Payment, ATM Withdrawal, Transfer, Other.
+- category: Best-guess from: Food & Dining, Groceries, Transportation, Shopping, Entertainment, Bills & Utilities, Health & Fitness, Travel, Education, Investment, Insurance, Credit Card Payment, ATM Withdrawal, Transfer, Other.
 - is_cc_payment: true ONLY if paying off a credit card bill (e.g. "CC bill payment"). Regular purchases made with a credit card are false.
 - confidence_score (0.0 to 1.0): Lower if merchant name is unclear/truncated, amount is ambiguous, or you had to guess the category.
 
@@ -188,6 +197,19 @@ export async function GET(request: NextRequest) {
         if (transaction.confidence_score === 0) {
           skippedJunk++;
           if (!dryRun) {
+            await prisma.transaction.create({
+              data: {
+                amount: transaction.amount || 0,
+                merchant: transaction.merchant || "Unknown",
+                date: new Date(transaction.date),
+                category: transaction.category || "Other",
+                is_cc_payment: transaction.is_cc_payment,
+                confidence_score: 0,
+                needs_review: true,
+                email_message_id: messageId,
+                source: "email",
+              },
+            });
             await gmail.users.messages.modify({
               userId: "me",
               id: messageId,

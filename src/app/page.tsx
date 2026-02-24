@@ -1,6 +1,6 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getTransactions, getCategories } from "./actions";
+import { getTransactions, getCategories, getSkippedEmails } from "./actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CategoryPieChart, DailyBarChart } from "@/components/charts";
 import { PendingReviews } from "@/components/pending-reviews";
 import { TransactionTable } from "@/components/transaction-table";
+import { SkippedEmails } from "@/components/skipped-emails";
 import { SeedButton } from "@/components/seed-button";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { AddTransactionDialog } from "@/components/add-transaction-dialog";
@@ -35,10 +36,11 @@ export default async function Dashboard({
   const year =
     params.year !== undefined ? parseInt(params.year, 10) : now.getFullYear();
 
-  const [transactions, categories] = await Promise.all([
+  const [transactions, categories, skippedEmails] = await Promise.all([
     getTransactions(month, year),
     getCategories(),
-  ]);
+    getSkippedEmails(),
+  ] as const);
 
   const totalSpend = transactions
     .filter((t) => !t.is_cc_payment)
@@ -54,6 +56,11 @@ export default async function Dashboard({
   const serialized = transactions.map((t) => ({
     ...t,
     date: t.date.toISOString(),
+  }));
+
+  const serializedSkipped = skippedEmails.map((s) => ({
+    ...s,
+    created_at: s.created_at.toISOString(),
   }));
 
   return (
@@ -153,6 +160,14 @@ export default async function Dashboard({
           <TabsList>
             <TabsTrigger value="reviews">Pending Reviews</TabsTrigger>
             <TabsTrigger value="all">All Transactions</TabsTrigger>
+            <TabsTrigger value="skipped">
+              Skipped Emails
+              {serializedSkipped.length > 0 && (
+                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                  {serializedSkipped.length}
+                </span>
+              )}
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="reviews" className="mt-4">
             <PendingReviews
@@ -163,6 +178,12 @@ export default async function Dashboard({
           <TabsContent value="all" className="mt-4">
             <TransactionTable
               transactions={serialized}
+              categories={categories}
+            />
+          </TabsContent>
+          <TabsContent value="skipped" className="mt-4">
+            <SkippedEmails
+              skippedEmails={serializedSkipped}
               categories={categories}
             />
           </TabsContent>

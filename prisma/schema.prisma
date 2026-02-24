@@ -28,3 +28,14 @@ model Transaction {
 
   @@index([amount, merchant, date], name: "idx_dedup")
 }
+
+model SkippedEmail {
+  id               String   @id @default(uuid())
+  email_message_id String   @unique
+  subject          String
+  sender           String
+  body_snippet     String
+  ai_reason        String?
+  dismissed        Boolean  @default(false)
+  created_at       DateTime @default(now())
+}

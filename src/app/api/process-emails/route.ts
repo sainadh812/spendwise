@@ -140,12 +140,17 @@ export async function GET(request: NextRequest) {
       try {
         const messageId = msg.id!;
 
-        const alreadyProcessed = await prisma.transaction.findUnique({
-          where: { email_message_id: messageId },
-        });
-        if (alreadyProcessed) {
+        const [alreadyProcessed, alreadySkipped] = await Promise.all([
+          prisma.transaction.findUnique({
+            where: { email_message_id: messageId },
+          }),
+          prisma.skippedEmail.findUnique({
+            where: { email_message_id: messageId },
+          }),
+        ]);
+        if (alreadyProcessed || alreadySkipped) {
           skippedDuplicates++;
-          if (verbose) {
+          if (verbose && alreadyProcessed) {
             entries.push({
               email_id: messageId,
               from: "",
@@ -197,17 +202,13 @@ export async function GET(request: NextRequest) {
         if (transaction.confidence_score === 0) {
           skippedJunk++;
           if (!dryRun) {
-            await prisma.transaction.create({
+            await prisma.skippedEmail.create({
               data: {
-                amount: transaction.amount || 0,
-                merchant: transaction.merchant || "Unknown",
-                date: new Date(transaction.date),
-                category: transaction.category || "Other",
-                is_cc_payment: transaction.is_cc_payment,
-                confidence_score: 0,
-                needs_review: true,
                 email_message_id: messageId,
-                source: "email",
+                subject,
+                sender: from,
+                body_snippet: body.slice(0, 500),
+                ai_reason: `AI classified as non-debit (merchant: ${transaction.merchant || "N/A"})`,
               },
             });
             await gmail.users.messages.modify({
@@ -216,15 +217,13 @@ export async function GET(request: NextRequest) {
               requestBody: { removeLabelIds: ["UNREAD"] },
             });
           }
-          if (verbose) {
-            entries.push({
-              email_id: messageId,
-              from,
-              subject,
-              parsed: { ...transaction, date: transaction.date },
-              status: "junk_skipped",
-            });
-          }
+          entries.push({
+            email_id: messageId,
+            from,
+            subject,
+            parsed: { ...transaction, date: transaction.date },
+            status: "junk_skipped",
+          });
           continue;
         }
 

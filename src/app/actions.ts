@@ -101,3 +101,49 @@ export async function deleteTransaction(id: string) {
   await prisma.transaction.delete({ where: { id } });
   revalidatePath("/");
 }
+
+export async function getSkippedEmails() {
+  return prisma.skippedEmail.findMany({
+    where: { dismissed: false },
+    orderBy: { created_at: "desc" },
+  });
+}
+
+export async function recoverSkippedEmail(
+  id: string,
+  data: {
+    amount: number;
+    merchant: string;
+    date: string;
+    category: string;
+    is_cc_payment: boolean;
+  }
+) {
+  const skipped = await prisma.skippedEmail.findUnique({ where: { id } });
+  if (!skipped) throw new Error("Skipped email not found");
+
+  await prisma.transaction.create({
+    data: {
+      amount: data.amount,
+      merchant: data.merchant,
+      date: new Date(data.date),
+      category: data.category,
+      is_cc_payment: data.is_cc_payment,
+      confidence_score: 1.0,
+      needs_review: false,
+      email_message_id: skipped.email_message_id,
+      source: "email_recovered",
+    },
+  });
+
+  await prisma.skippedEmail.delete({ where: { id } });
+  revalidatePath("/");
+}
+
+export async function dismissSkippedEmail(id: string) {
+  await prisma.skippedEmail.update({
+    where: { id },
+    data: { dismissed: true },
+  });
+  revalidatePath("/");
+}

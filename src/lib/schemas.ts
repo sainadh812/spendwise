@@ -3,7 +3,11 @@ import { z } from "zod";
 export const transactionSchema = z.object({
   amount: z.number().positive().describe("Transaction amount in INR"),
   merchant: z.string().describe("Name of the merchant or payee"),
-  date: z.string().describe("Transaction date in ISO 8601 format"),
+  date: z
+    .string()
+    .describe(
+      "Transaction date in ISO 8601 format. Indian bank emails use dd-mm-yyyy or dd-mm-yy (day-month-year). For 2-digit years, interpret as dd-mm-yy (e.g. 23-02-26 = 2026-02-23). Always prefer the most recent valid date that is not in the future."
+    ),
   category: z
     .string()
     .describe(

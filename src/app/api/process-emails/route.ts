@@ -51,6 +51,9 @@ Extraction rules:
   - HDFC: usually after "at" or "to" (e.g. "at SWIGGY" or "to JOHN DOE")
   - IDFC FIRST Bank: usually after "spent at" or "paid to"
 - date: Transaction date in ISO 8601 format. Parse from email body, or fall back to today.
+  Indian bank emails typically use dd-mm-yyyy or dd-mm-yy date formats (day first, then month, then year).
+  For 2-digit years (e.g. "23-02-26"), interpret as dd-mm-yy NOT yy-mm-dd — so "23-02-26" means 23 Feb 2026.
+  Always pick the most recent valid date (not a future date). Never assume yyyy-mm-dd or mm-dd-yy.
 - category: Best-guess from: Food & Dining, Groceries, Transportation, Shopping, Entertainment, Bills & Utilities, Health & Fitness, Travel, Education, Investment, Insurance, Credit Card Payment, ATM Withdrawal, Transfer, Other.
 - is_cc_payment: true ONLY if paying off a credit card bill (e.g. "CC bill payment"). Regular purchases made with a credit card are false.
 - confidence_score (0.0 to 1.0): Lower if merchant name is unclear/truncated, amount is ambiguous, or you had to guess the category.

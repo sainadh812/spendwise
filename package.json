@@ -3,14 +3,14 @@
   "version": "0.2.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "NODE_OPTIONS='--inspect' next dev -p 3003",
     "build": "prisma generate && prisma db push && next build",
-    "start": "next start",
+    "start": "next start -p 3003",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "curl -X POST http://localhost:3000/api/seed"
+    "db:seed": "curl -X POST http://localhost:3003/api/seed"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.30",

@@ -26,6 +26,7 @@ interface Transaction {
   is_cc_payment: boolean;
   confidence_score: number;
   needs_review: boolean;
+  remarks: string | null;
 }
 
 function formatINR(value: number) {
@@ -69,6 +70,7 @@ export function TransactionTable({
               <TableHead>Merchant</TableHead>
               <TableHead>Amount</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Remarks</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -99,6 +101,7 @@ function TransactionRow({
   const [merchant, setMerchant] = useState(t.merchant);
   const [amount, setAmount] = useState(String(t.amount));
   const [category, setCategory] = useState(t.category);
+  const [remarks, setRemarks] = useState(t.remarks ?? "");
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
@@ -107,6 +110,7 @@ function TransactionRow({
         merchant,
         amount: parseFloat(amount),
         category,
+        remarks: remarks.trim() || null,
       });
       setEditing(false);
     });
@@ -120,6 +124,7 @@ function TransactionRow({
     setMerchant(t.merchant);
     setAmount(String(t.amount));
     setCategory(t.category);
+    setRemarks(t.remarks ?? "");
     setEditing(false);
   }
 
@@ -173,6 +178,20 @@ function TransactionRow({
           />
         ) : (
           <Badge variant="outline">{t.category}</Badge>
+        )}
+      </TableCell>
+      <TableCell>
+        {editing ? (
+          <Input
+            value={remarks}
+            onChange={(e) => setRemarks(e.target.value)}
+            placeholder="Add a note..."
+            className="h-8 w-44"
+          />
+        ) : (
+          <span className="text-sm text-muted-foreground">
+            {t.remarks || "—"}
+          </span>
         )}
       </TableCell>
       <TableCell>

@@ -29,6 +29,7 @@ interface Transaction {
   is_cc_payment: boolean;
   confidence_score: number;
   needs_review: boolean;
+  remarks: string | null;
 }
 
 function formatINR(value: number) {

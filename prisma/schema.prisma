@@ -22,6 +22,7 @@ model Transaction {
   confidence_score Float
   needs_review     Boolean  @default(true)
   email_message_id String?  @unique
+  remarks          String?
   source           String   @default("email")
   created_at       DateTime @default(now())
   updated_at       DateTime @updatedAt

@@ -88,6 +88,7 @@ export async function updateTransaction(
     merchant?: string;
     amount?: number;
     is_cc_payment?: boolean;
+    remarks?: string | null;
   }
 ) {
   await prisma.transaction.update({

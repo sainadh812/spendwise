@@ -15,6 +15,7 @@ const BANK_EMAIL_QUERY = [
   "(",
   "from:alerts@hdfcbank.net",
   "OR from:alerts@hdfcbank.bank.in",
+  "OR from:nachautoemailer@hdfcbank.bank.in",
   "OR from:noreply@idfcfirstbank.com",
   "OR from:delivery.idfcfirstbank.com",
   ")",
@@ -49,6 +50,7 @@ Extraction rules:
 - amount: The debited amount in INR. Look for "Rs.", "INR", "Rs" followed by a number.
 - merchant: The merchant/payee name.
   - HDFC: usually after "at" or "to" (e.g. "at SWIGGY" or "to JOHN DOE")
+  - HDFC NACH auto-debit: the merchant name appears after "towards" (e.g. "towards MERCHANT NAME with UMRN")
   - IDFC FIRST Bank: usually after "spent at" or "paid to"
 - date: Transaction date in ISO 8601 format. Parse from email body, or fall back to today.
   Indian bank emails typically use dd-mm-yyyy or dd-mm-yy date formats (day first, then month, then year).

@@ -94,9 +94,10 @@ export function CategoryPieChart({
               outerRadius={100}
               paddingAngle={2}
               dataKey="value"
-              label={({ name, percent }: { name?: string; percent?: number }) =>
-                `${name ?? ""} ${((percent ?? 0) * 100).toFixed(0)}%`
-              }
+              label={({ name, percent }: { name?: string; percent?: number }) => {
+                const pct = (percent ?? 0) * 100;
+                return `${name ?? ""} ${pct < 1 ? pct.toFixed(1) : pct.toFixed(0)}%`;
+              }}
               labelLine={false}
             >
               {data.map((_, index) => (

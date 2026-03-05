@@ -21,7 +21,10 @@ const BANK_EMAIL_QUERY = [
   ")",
 ].join(" ");
 
-const AI_PROMPT = `You are a financial transaction parser for Indian bank alert emails.
+function buildAIPrompt(): string {
+  const currentYear = new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+  return `You are a financial transaction parser for Indian bank alert emails.
 Your job is to extract DEBIT (money going out) transactions — any transaction where money leaves the account.
 
 CRITICAL — set confidence_score to 0.0 and skip ONLY if the email is one of these:
@@ -52,7 +55,8 @@ Extraction rules:
   - HDFC: usually after "at" or "to" (e.g. "at SWIGGY" or "to JOHN DOE")
   - HDFC NACH auto-debit: the merchant name appears after "towards" (e.g. "towards MERCHANT NAME with UMRN")
   - IDFC FIRST Bank: usually after "spent at" or "paid to"
-- date: Transaction date in ISO 8601 format. Parse from email body, or fall back to today.
+- date: Transaction date in ISO 8601 format (YYYY-MM-DDT00:00:00Z, always UTC with Z suffix). Parse from email body, or fall back to today (${today}).
+  Today's date is ${today} and the current year is ${currentYear}. Do NOT default to past years like 2024 — use the year stated in the email.
   Indian bank emails typically use dd-mm-yyyy or dd-mm-yy date formats (day first, then month, then year).
   For 2-digit years (e.g. "23-02-26"), interpret as dd-mm-yy NOT yy-mm-dd — so "23-02-26" means 23 Feb 2026.
   Always pick the most recent valid date (not a future date). Never assume yyyy-mm-dd or mm-dd-yy.
@@ -62,6 +66,7 @@ Extraction rules:
 
 Email content:
 `;
+}
 
 const MONTH_MAP: Record<string, number> = {
   jan: 0, january: 0,
@@ -80,7 +85,7 @@ const MONTH_MAP: Record<string, number> = {
 
 function extractDateFromEmail(emailBody: string): Date | null {
   const patterns = [
-    /(\d{1,2})\s+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,.]?\s*(\d{4})/gi,
+    /(\d{1,2})[\s-]+(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[,.\s-]*(\d{4})/gi,
     /(\d{1,2})[-/](\d{1,2})[-/](\d{4})/g,
     /(\d{1,2})[-/](\d{1,2})[-/](\d{2})\b/g,
   ];
@@ -112,7 +117,10 @@ function extractDateFromEmail(emailBody: string): Date | null {
 
 function resolveTransactionDate(aiDateStr: string, emailBody: string): Date {
   const extractedDate = extractDateFromEmail(emailBody);
-  const aiDate = new Date(aiDateStr);
+  const normalizedAiStr = aiDateStr.includes("T") && !aiDateStr.endsWith("Z") && !/[+-]\d{2}:\d{2}$/.test(aiDateStr)
+    ? aiDateStr + "Z"
+    : aiDateStr;
+  const aiDate = new Date(normalizedAiStr);
   const aiValid = !isNaN(aiDate.getTime());
 
   if (extractedDate && aiValid) {
@@ -267,7 +275,7 @@ export async function GET(request: NextRequest) {
         const { object: transaction } = await generateObject({
           model: google("gemini-2.5-flash"),
           schema: transactionSchema,
-          prompt: AI_PROMPT + emailText,
+          prompt: buildAIPrompt() + emailText,
         });
 
         if (transaction.confidence_score === 0) {

@@ -18,6 +18,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { CategorySelect } from "@/components/category-select";
 
 interface Transaction {
@@ -115,6 +116,7 @@ function ReviewRow({
   const [editing, setEditing] = useState(false);
   const [category, setCategory] = useState(t.category);
   const [merchant, setMerchant] = useState(t.merchant);
+  const [isCcPayment, setIsCcPayment] = useState(t.is_cc_payment);
   const [isPending, startTransition] = useTransition();
 
   function handleApprove() {
@@ -123,7 +125,7 @@ function ReviewRow({
 
   function handleSave() {
     startTransition(async () => {
-      await updateTransaction(t.id, { category, merchant });
+      await updateTransaction(t.id, { category, merchant, is_cc_payment: isCcPayment });
       setEditing(false);
     });
   }
@@ -151,7 +153,25 @@ function ReviewRow({
           t.merchant
         )}
       </TableCell>
-      <TableCell className="font-medium">{formatINR(t.amount)}</TableCell>
+      <TableCell className="font-medium">
+        {formatINR(t.amount)}
+        {editing ? (
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+            <Checkbox
+              checked={isCcPayment}
+              onCheckedChange={(checked) => setIsCcPayment(checked === true)}
+              className="h-3.5 w-3.5"
+            />
+            CC Payment
+          </label>
+        ) : (
+          t.is_cc_payment && (
+            <Badge variant="secondary" className="ml-2 text-xs">
+              CC Payment
+            </Badge>
+          )
+        )}
+      </TableCell>
       <TableCell>
         {editing ? (
           <CategorySelect

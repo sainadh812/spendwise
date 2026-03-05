@@ -15,6 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CategorySelect } from "@/components/category-select";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Pencil, Trash2 } from "lucide-react";
 
 interface Transaction {
@@ -102,6 +103,7 @@ function TransactionRow({
   const [amount, setAmount] = useState(String(t.amount));
   const [category, setCategory] = useState(t.category);
   const [remarks, setRemarks] = useState(t.remarks ?? "");
+  const [isCcPayment, setIsCcPayment] = useState(t.is_cc_payment);
   const [isPending, startTransition] = useTransition();
 
   function handleSave() {
@@ -111,6 +113,7 @@ function TransactionRow({
         amount: parseFloat(amount),
         category,
         remarks: remarks.trim() || null,
+        is_cc_payment: isCcPayment,
       });
       setEditing(false);
     });
@@ -125,6 +128,7 @@ function TransactionRow({
     setAmount(String(t.amount));
     setCategory(t.category);
     setRemarks(t.remarks ?? "");
+    setIsCcPayment(t.is_cc_payment);
     setEditing(false);
   }
 
@@ -150,13 +154,23 @@ function TransactionRow({
       </TableCell>
       <TableCell className="font-medium">
         {editing ? (
-          <Input
-            type="number"
-            step="0.01"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className="h-8 w-28"
-          />
+          <div className="space-y-1">
+            <Input
+              type="number"
+              step="0.01"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              className="h-8 w-28"
+            />
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Checkbox
+                checked={isCcPayment}
+                onCheckedChange={(checked) => setIsCcPayment(checked === true)}
+                className="h-3.5 w-3.5"
+              />
+              CC Payment
+            </label>
+          </div>
         ) : (
           <>
             {formatINR(t.amount)}

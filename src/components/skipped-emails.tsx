@@ -103,6 +103,7 @@ function SkippedEmailRow({
   email: SkippedEmail;
   categories: string[];
 }) {
+  const [showDetails, setShowDetails] = useState(false);
   const [showRecover, setShowRecover] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -131,12 +132,26 @@ function SkippedEmailRow({
         is_cc_payment: isCcPayment,
       });
       setShowRecover(false);
+      setShowDetails(false);
     });
+  }
+
+  function handleRecoverFromDetails() {
+    setShowDetails(false);
+    setShowRecover(true);
+  }
+
+  function handleDismissFromDetails() {
+    setShowDetails(false);
+    handleDismiss();
   }
 
   return (
     <>
-      <TableRow>
+      <TableRow
+        className="cursor-pointer hover:bg-muted/50"
+        onClick={() => setShowDetails(true)}
+      >
         <TableCell className="whitespace-nowrap">
           {new Date(email.created_at).toLocaleDateString("en-IN", {
             day: "2-digit",
@@ -150,12 +165,12 @@ function SkippedEmailRow({
           {email.subject}
         </TableCell>
         <TableCell>
-          <Badge variant="outline" className="text-xs font-normal">
+          <Badge variant="outline" className="max-w-[200px] truncate text-xs font-normal">
             {email.ai_reason || "Non-debit"}
           </Badge>
         </TableCell>
         <TableCell className="text-right">
-          <div className="flex justify-end gap-1">
+          <div className="flex justify-end gap-1" onClick={(e) => e.stopPropagation()}>
             <Button
               size="sm"
               variant="outline"
@@ -178,6 +193,70 @@ function SkippedEmailRow({
           </div>
         </TableCell>
       </TableRow>
+
+      <Dialog open={showDetails} onOpenChange={setShowDetails}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Skipped Email Details</DialogTitle>
+            <DialogDescription>
+              Full details of the skipped email for review.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Subject</p>
+              <p className="text-sm">{email.subject}</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Sender</p>
+                <p className="break-all text-sm">{email.sender}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-medium text-muted-foreground">Date Received</p>
+                <p className="text-sm">
+                  {new Date(email.created_at).toLocaleDateString("en-IN", {
+                    day: "2-digit",
+                    month: "short",
+                    year: "numeric",
+                  })}
+                </p>
+              </div>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Skip Reason</p>
+              <Badge variant="outline" className="text-xs font-normal">
+                {email.ai_reason || "Non-debit"}
+              </Badge>
+            </div>
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Email Snippet</p>
+              <div className="max-h-48 overflow-y-auto rounded border bg-muted/50 p-3 text-xs whitespace-pre-wrap">
+                {email.body_snippet}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDismissFromDetails}
+              disabled={isPending}
+            >
+              <X className="mr-1 h-3 w-3" />
+              Dismiss
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleRecoverFromDetails}
+              disabled={isPending}
+            >
+              <RotateCcw className="mr-1 h-3 w-3" />
+              Recover as Transaction
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={showRecover} onOpenChange={setShowRecover}>
         <DialogContent>

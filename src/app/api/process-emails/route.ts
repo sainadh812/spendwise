@@ -3,6 +3,7 @@ import { google as googleapis } from "googleapis";
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { prisma } from "@/lib/prisma";
+import { emailBodySnippet } from "@/lib/email";
 import { transactionSchema } from "@/lib/schemas";
 
 // We use newer_than:2d (not 1d) as a safety buffer.
@@ -286,7 +287,7 @@ export async function GET(request: NextRequest) {
                 email_message_id: messageId,
                 subject,
                 sender: from,
-                body_snippet: body.slice(0, 500),
+                body_snippet: emailBodySnippet(body),
                 ai_reason: `AI classified as non-debit (merchant: ${transaction.merchant || "N/A"})`,
               },
             });

@@ -1,7 +1,13 @@
 import { convert } from "html-to-text";
 
 export function emailBodyToText(body: string): string {
-  return convert(body, { wordwrap: false });
+  return convert(body, {
+    wordwrap: false,
+    selectors: [
+      { selector: "img", format: "skip" },
+      { selector: "a", options: { ignoreHref: true } },
+    ],
+  });
 }
 
 export function emailBodySnippet(body: string, maxLength = 500): string {

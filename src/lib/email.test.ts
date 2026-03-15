@@ -96,6 +96,58 @@ describe("emailBodyToText", () => {
     expect(result).toContain("Another one");
     expect(result).toContain("With break");
   });
+
+  it("excludes image URLs and link hrefs from output", () => {
+    const html = `
+      <html>
+        <head><style>@media screen { table { width: 100%; } }</style></head>
+        <body>
+          <table width="600" border="0" cellspacing="0" cellpadding="0" align="center">
+            <tr>
+              <td>
+                <a href="https://tracking.example.com/v1/r/abc123" target="_blank">
+                  <img src="https://img.example.com/bank/images/2026/mar/Banner.jpg" alt="" width="100%" border="0">
+                </a>
+              </td>
+            </tr>
+            <tr>
+              <td><img src="https://cdn.example.com/content/images/header.jpg" alt="" width="100%" border="0"></td>
+            </tr>
+            <tr>
+              <td align="left" style="font-family:Arial; font-size:16px; color:#000;">
+                Dear Customer,
+                Rs. 500.00 is successfully credited to your account **1234 by VPA testuser@oksbi on 14-03-26.
+                Your UPI transaction reference number is 123456789012.
+                Thank you for banking with us.
+                Warm Regards,
+                Example Bank
+              </td>
+            </tr>
+            <tr>
+              <td style="font-size:12px;">
+                For more details on Service charges and Fees,
+                <a href="https://tracking.example.com/v1/r/xyz789" style="text-decoration:underline;color:#004b8d;" target="_blank">
+                  <strong>click here.</strong>
+                </a>
+              </td>
+            </tr>
+          </table>
+          <img src="https://tracking.example.com/v1/w/pixel123" width="1" height="1" border="0">
+        </body>
+      </html>
+    `;
+    const result = emailBodyToText(html);
+    expect(result).toContain("Dear Customer");
+    expect(result).toContain("Rs. 500.00");
+    expect(result).toContain("account **1234");
+    expect(result).toContain("123456789012");
+    expect(result).toContain("click here.");
+    expect(result).not.toContain("img.example.com");
+    expect(result).not.toContain("cdn.example.com");
+    expect(result).not.toContain("tracking.example.com");
+    expect(result).not.toContain(".jpg");
+    expect(result).not.toContain("https://");
+  });
 });
 
 describe("emailBodySnippet", () => {

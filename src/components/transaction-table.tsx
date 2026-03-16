@@ -14,6 +14,17 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { CategorySelect } from "@/components/category-select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Pencil, Trash2 } from "lucide-react";
@@ -237,16 +248,33 @@ function TransactionRow({
               >
                 <Pencil className="h-4 w-4" />
               </Button>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8 text-destructive"
-                onClick={handleDelete}
-                disabled={isPending}
-                title="Delete"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8 text-destructive"
+                    disabled={isPending}
+                    title="Delete"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Transaction</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete the {formatINR(t.amount)} transaction to {t.merchant}. This action cannot be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleDelete}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </>
           )}
         </div>

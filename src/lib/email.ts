@@ -13,3 +13,8 @@ export function emailBodyToText(body: string): string {
 export function emailBodySnippet(body: string, maxLength = 500): string {
   return emailBodyToText(body).slice(0, maxLength);
 }
+
+export function buildEmailText(from: string, subject: string, body: string): string {
+  const cleanBody = emailBodyToText(body);
+  return `From: ${from}\nSubject: ${subject}\n\nBody:\n${cleanBody}`;
+}

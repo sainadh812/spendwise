@@ -3,7 +3,7 @@ import { google as googleapis } from "googleapis";
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { prisma } from "@/lib/prisma";
-import { emailBodySnippet } from "@/lib/email";
+import { emailBodySnippet, buildEmailText } from "@/lib/email";
 import { transactionSchema } from "@/lib/schemas";
 import { resolveTransactionDate } from "@/lib/date-extraction";
 
@@ -205,7 +205,7 @@ export async function GET(request: NextRequest) {
           body = Buffer.from(body, "base64").toString("utf-8");
         }
 
-        const emailText = `From: ${from}\nSubject: ${subject}\n\nBody:\n${body}`;
+        const emailText = buildEmailText(from, subject, body);
 
         const { object: transaction } = await generateObject({
           model: google("gemini-2.5-flash"),

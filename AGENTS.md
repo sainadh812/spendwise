@@ -10,13 +10,13 @@ Vercel AI SDK, NextAuth v5 (beta), Recharts, Zod 4.
 ## Build / Dev / Lint Commands
 
 ```bash
-npm run dev            # Start dev server (next dev)
+npm run dev            # Start dev server (next dev, port 3003)
 npm run build          # prisma generate && prisma db push && next build
 npm run lint           # eslint (flat config, next core-web-vitals + typescript)
-npm run start          # next start (production)
+npm run start          # next start (production, port 3003)
 npm run db:migrate     # prisma migrate dev
 npm run db:push        # prisma db push
-npm run db:seed        # POST http://localhost:3000/api/seed (dev only)
+npm run db:seed        # POST http://localhost:3003/api/seed (dev only)
 npm run postinstall    # prisma generate
 ```
 
@@ -32,8 +32,18 @@ npm run build          # Full build verification
 
 ### Testing
 
-No test framework is configured. There are no test files or test scripts.
-If adding tests, check with the user on their preferred framework first.
+Vitest 4 with happy-dom environment. Setup file: `src/test-setup.ts` (imports `@testing-library/jest-dom/vitest`).
+
+```bash
+npm test                              # Run all tests (vitest run)
+npm run test:watch                    # Watch mode (vitest)
+npx vitest run src/lib/email.test.ts  # Run a single test file
+npx vitest run -t "parses dd-Mon"     # Run tests matching a name pattern
+```
+
+Test files live next to their source: `src/**/*.test.ts` / `src/**/*.test.tsx`.
+Tests use `describe`/`it`/`expect`/`vi` from `vitest`, `@testing-library/react` for component
+tests, and `@testing-library/user-event` for interactions. Mock modules with `vi.mock()`.
 
 ## Project Structure
 
@@ -60,6 +70,7 @@ src/
     utils.ts                # cn() helper (clsx + tailwind-merge)
   middleware.ts             # Auth guard (cookie check, redirect to /login)
   generated/prisma/         # Generated Prisma client (gitignored)
+  test-setup.ts             # Vitest global setup (@testing-library/jest-dom)
 prisma/
   schema.prisma             # DB schema (Category, Transaction models)
 ```
@@ -112,6 +123,7 @@ Use named exports for components. Default exports only for Next.js pages/layouts
 - **Interfaces**: PascalCase, no `I` prefix (`Transaction`, `CategorySelectProps`)
 - **Constants**: UPPER_SNAKE_CASE for module-level (`DEFAULT_CATEGORIES`, `BANK_EMAIL_QUERY`)
 - **Database fields**: snake_case (`is_cc_payment`, `confidence_score`, `needs_review`)
+- **Test files**: same name as source with `.test.ts`/`.test.tsx` suffix, co-located
 
 ### Error Handling
 

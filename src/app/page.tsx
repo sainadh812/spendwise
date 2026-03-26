@@ -12,6 +12,7 @@ import { SkippedEmails } from "@/components/skipped-emails";
 import { SeedButton } from "@/components/seed-button";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { AddTransactionDialog } from "@/components/add-transaction-dialog";
+import { NavBar } from "@/components/nav-bar";
 
 function formatINR(value: number) {
   return new Intl.NumberFormat("en-IN", {
@@ -67,7 +68,10 @@ export default async function Dashboard({
     <div className="min-h-screen bg-background">
       <header className="border-b">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <h1 className="text-xl font-bold">Expense Tracker</h1>
+          <div className="flex items-center gap-6">
+            <h1 className="text-xl font-bold">Expense Tracker</h1>
+            <NavBar />
+          </div>
           <div className="flex items-center gap-3">
             <AddTransactionDialog categories={categories} />
             <form

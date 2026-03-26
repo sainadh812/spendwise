@@ -1,0 +1,653 @@
+"use client";
+
+import {
+  PieChart,
+  Pie,
+  Cell,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+  LineChart,
+  Line,
+  AreaChart,
+  Area,
+} from "recharts";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+
+const COLORS = [
+  "hsl(221, 83%, 53%)",
+  "hsl(142, 71%, 45%)",
+  "hsl(38, 92%, 50%)",
+  "hsl(0, 84%, 60%)",
+  "hsl(262, 83%, 58%)",
+  "hsl(199, 89%, 48%)",
+  "hsl(330, 81%, 60%)",
+  "hsl(25, 95%, 53%)",
+  "hsl(173, 80%, 40%)",
+  "hsl(47, 96%, 53%)",
+  "hsl(280, 65%, 60%)",
+  "hsl(210, 40%, 50%)",
+];
+
+export interface AnalyticsTransaction {
+  id: string;
+  amount: number;
+  merchant: string;
+  date: string;
+  category: string;
+  is_cc_payment: boolean;
+}
+
+function formatINR(value: number) {
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 0,
+  }).format(value);
+}
+
+function formatCompact(value: number) {
+  if (value >= 100000) return `${(value / 100000).toFixed(1)}L`;
+  if (value >= 1000) return `${(value / 1000).toFixed(0)}k`;
+  return String(value);
+}
+
+function EmptyState({ message }: { message: string }) {
+  return (
+    <div className="flex h-[300px] items-center justify-center text-muted-foreground">
+      {message}
+    </div>
+  );
+}
+
+export function MonthlyTrendChart({
+  transactions,
+  year,
+}: {
+  transactions: AnalyticsTransaction[];
+  year: number;
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const monthlyMap = new Map<number, number>();
+
+  for (const t of spending) {
+    const m = new Date(t.date).getMonth();
+    monthlyMap.set(m, (monthlyMap.get(m) || 0) + t.amount);
+  }
+
+  const data = Array.from({ length: 12 }, (_, i) => ({
+    month: new Date(year, i).toLocaleDateString("en-IN", { month: "short" }),
+    amount: monthlyMap.get(i) || 0,
+  }));
+
+  const hasData = data.some((d) => d.amount > 0);
+
+  return (
+    <Card className="col-span-full">
+      <CardHeader>
+        <CardTitle>Monthly Spending Trend — {year}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!hasData ? (
+          <EmptyState message="No spending data for this year" />
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" fontSize={12} tickLine={false} />
+              <YAxis
+                fontSize={12}
+                tickLine={false}
+                tickFormatter={formatCompact}
+              />
+              <Tooltip
+                formatter={(value) => [formatINR(Number(value)), "Spent"]}
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid hsl(var(--border))",
+                }}
+              />
+              <Line
+                type="monotone"
+                dataKey="amount"
+                stroke="hsl(221, 83%, 53%)"
+                strokeWidth={2}
+                dot={{ r: 4, fill: "hsl(221, 83%, 53%)" }}
+                activeDot={{ r: 6 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function AnalyticsPieChart({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const categoryMap = new Map<string, number>();
+
+  for (const t of spending) {
+    categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount);
+  }
+
+  const data = Array.from(categoryMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  const total = data.reduce((s, d) => s + d.value, 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Category Breakdown</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <div className="flex flex-col items-center gap-4">
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {data.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value) => formatINR(Number(value))}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="grid w-full grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              {data.map((item, i) => (
+                <div key={item.name} className="flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                  <span className="truncate text-muted-foreground">
+                    {item.name}
+                  </span>
+                  <span className="ml-auto font-medium">
+                    {((item.value / total) * 100).toFixed(0)}%
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function AnalyticsDailyBarChart({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const dailyMap = new Map<string, number>();
+
+  for (const t of spending) {
+    const day = new Date(t.date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+    });
+    dailyMap.set(day, (dailyMap.get(day) || 0) + t.amount);
+  }
+
+  const data = Array.from(dailyMap.entries())
+    .map(([date, amount]) => ({ date, amount }))
+    .reverse();
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Daily Spending</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis
+                dataKey="date"
+                fontSize={11}
+                tickLine={false}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                fontSize={12}
+                tickLine={false}
+                tickFormatter={formatCompact}
+              />
+              <Tooltip
+                formatter={(value) => [formatINR(Number(value)), "Spent"]}
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid hsl(var(--border))",
+                }}
+              />
+              <Bar
+                dataKey="amount"
+                fill="hsl(221, 83%, 53%)"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function CategoryComparisonChart({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const categoryMap = new Map<string, number>();
+
+  for (const t of spending) {
+    categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount);
+  }
+
+  const data = Array.from(categoryMap.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Spending by Category</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <ResponsiveContainer width="100%" height={Math.max(300, data.length * 40)}>
+            <BarChart data={data} layout="vertical" margin={{ left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis
+                type="number"
+                fontSize={12}
+                tickLine={false}
+                tickFormatter={formatCompact}
+              />
+              <YAxis
+                type="category"
+                dataKey="category"
+                fontSize={12}
+                tickLine={false}
+                width={120}
+              />
+              <Tooltip
+                formatter={(value) => [formatINR(Number(value)), "Spent"]}
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid hsl(var(--border))",
+                }}
+              />
+              <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                {data.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function StackedAreaChart({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+
+  const categories = new Set<string>();
+  for (const t of spending) categories.add(t.category);
+
+  const dailyCategory = new Map<string, Map<string, number>>();
+  for (const t of spending) {
+    const day = new Date(t.date).toLocaleDateString("en-IN", {
+      day: "2-digit",
+      month: "short",
+    });
+    if (!dailyCategory.has(day)) dailyCategory.set(day, new Map());
+    const dayMap = dailyCategory.get(day)!;
+    dayMap.set(t.category, (dayMap.get(t.category) || 0) + t.amount);
+  }
+
+  const sortedCategories = Array.from(categories);
+  const data = Array.from(dailyCategory.entries())
+    .map(([date, catMap]) => {
+      const entry: Record<string, string | number> = { date };
+      for (const cat of sortedCategories) {
+        entry[cat] = catMap.get(cat) || 0;
+      }
+      return entry;
+    })
+    .reverse();
+
+  return (
+    <Card className="col-span-full">
+      <CardHeader>
+        <CardTitle>Category Spending Over Time</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <ResponsiveContainer width="100%" height={350}>
+            <AreaChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis
+                dataKey="date"
+                fontSize={11}
+                tickLine={false}
+                angle={-45}
+                textAnchor="end"
+                height={60}
+              />
+              <YAxis
+                fontSize={12}
+                tickLine={false}
+                tickFormatter={formatCompact}
+              />
+              <Tooltip
+                formatter={(value) => formatINR(Number(value))}
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid hsl(var(--border))",
+                }}
+              />
+              <Legend />
+              {sortedCategories.map((cat, i) => (
+                <Area
+                  key={cat}
+                  type="monotone"
+                  dataKey={cat}
+                  stackId="1"
+                  fill={COLORS[i % COLORS.length]}
+                  stroke={COLORS[i % COLORS.length]}
+                  fillOpacity={0.6}
+                />
+              ))}
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function TopMerchantsChart({
+  transactions,
+  limit = 10,
+}: {
+  transactions: AnalyticsTransaction[];
+  limit?: number;
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const merchantMap = new Map<string, { total: number; count: number }>();
+
+  for (const t of spending) {
+    const existing = merchantMap.get(t.merchant) || { total: 0, count: 0 };
+    existing.total += t.amount;
+    existing.count += 1;
+    merchantMap.set(t.merchant, existing);
+  }
+
+  const data = Array.from(merchantMap.entries())
+    .map(([merchant, { total, count }]) => ({ merchant, total, count }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, limit);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Top Merchants</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <div className="space-y-3">
+            {data.map((item, i) => {
+              const maxAmount = data[0].total;
+              const pct = (item.total / maxAmount) * 100;
+              return (
+                <div key={item.merchant} className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="flex items-center gap-2 truncate font-medium">
+                      <span className="text-muted-foreground">{i + 1}.</span>
+                      {item.merchant}
+                    </span>
+                    <span className="shrink-0 ml-2">
+                      {formatINR(item.total)}
+                      <span className="ml-1 text-xs text-muted-foreground">
+                        ({item.count}x)
+                      </span>
+                    </span>
+                  </div>
+                  <div className="h-2 w-full rounded-full bg-muted">
+                    <div
+                      className="h-2 rounded-full transition-all"
+                      style={{
+                        width: `${pct}%`,
+                        backgroundColor: COLORS[i % COLORS.length],
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+export function WeekdayHeatmap({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const weekdayData = Array.from({ length: 7 }, () => ({
+    total: 0,
+    count: 0,
+  }));
+
+  for (const t of spending) {
+    const day = new Date(t.date).getDay();
+    weekdayData[day].total += t.amount;
+    weekdayData[day].count += 1;
+  }
+
+  const maxTotal = Math.max(...weekdayData.map((d) => d.total), 1);
+
+  const data = WEEKDAYS.map((name, i) => ({
+    day: name,
+    total: weekdayData[i].total,
+    count: weekdayData[i].count,
+    avg: weekdayData[i].count > 0
+      ? weekdayData[i].total / weekdayData[i].count
+      : 0,
+    intensity: weekdayData[i].total / maxTotal,
+  }));
+
+  const weekdayTotal = data
+    .filter((d) => !["Sun", "Sat"].includes(d.day))
+    .reduce((s, d) => s + d.total, 0);
+  const weekendTotal = data
+    .filter((d) => ["Sun", "Sat"].includes(d.day))
+    .reduce((s, d) => s + d.total, 0);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Spending by Day of Week</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {spending.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <div className="space-y-4">
+            <div className="grid grid-cols-7 gap-2">
+              {data.map((item) => {
+                const opacity = Math.max(0.1, item.intensity);
+                return (
+                  <div
+                    key={item.day}
+                    className="flex flex-col items-center gap-1 rounded-lg p-2 text-center"
+                  >
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {item.day}
+                    </span>
+                    <div
+                      className="flex h-14 w-14 items-center justify-center rounded-lg text-xs font-bold"
+                      style={{
+                        backgroundColor: `hsl(221, 83%, 53%)`,
+                        opacity,
+                        color: opacity > 0.4 ? "white" : "hsl(221, 83%, 53%)",
+                      }}
+                    >
+                      {formatCompact(item.total)}
+                    </div>
+                    <span className="text-xs text-muted-foreground">
+                      {item.count} txn{item.count !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="flex items-center justify-center gap-6 text-sm">
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-primary" />
+                <span className="text-muted-foreground">Weekdays:</span>
+                <span className="font-medium">{formatINR(weekdayTotal)}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-3 w-3 rounded-full bg-destructive" />
+                <span className="text-muted-foreground">Weekends:</span>
+                <span className="font-medium">{formatINR(weekendTotal)}</span>
+              </div>
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function YearOverYearChart({
+  currentTransactions,
+  previousTransactions,
+  currentYear,
+  previousYear,
+}: {
+  currentTransactions: AnalyticsTransaction[];
+  previousTransactions: AnalyticsTransaction[];
+  currentYear: number;
+  previousYear: number;
+}) {
+  function buildMonthly(txns: AnalyticsTransaction[]) {
+    const spending = txns.filter((t) => !t.is_cc_payment);
+    const map = new Map<number, number>();
+    for (const t of spending) {
+      const m = new Date(t.date).getMonth();
+      map.set(m, (map.get(m) || 0) + t.amount);
+    }
+    return map;
+  }
+
+  const currentMap = buildMonthly(currentTransactions);
+  const previousMap = buildMonthly(previousTransactions);
+
+  const data = Array.from({ length: 12 }, (_, i) => ({
+    month: new Date(2000, i).toLocaleDateString("en-IN", { month: "short" }),
+    [String(currentYear)]: currentMap.get(i) || 0,
+    [String(previousYear)]: previousMap.get(i) || 0,
+  }));
+
+  const hasData =
+    data.some((d) => (d[String(currentYear)] as number) > 0) ||
+    data.some((d) => (d[String(previousYear)] as number) > 0);
+
+  return (
+    <Card className="col-span-full">
+      <CardHeader>
+        <CardTitle>
+          Year-over-Year Comparison — {previousYear} vs {currentYear}
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {!hasData ? (
+          <EmptyState message="No data available for comparison" />
+        ) : (
+          <ResponsiveContainer width="100%" height={350}>
+            <BarChart data={data}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis dataKey="month" fontSize={12} tickLine={false} />
+              <YAxis
+                fontSize={12}
+                tickLine={false}
+                tickFormatter={formatCompact}
+              />
+              <Tooltip
+                formatter={(value, name) => [formatINR(Number(value)), name]}
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid hsl(var(--border))",
+                }}
+              />
+              <Legend />
+              <Bar
+                dataKey={String(previousYear)}
+                fill="hsl(210, 40%, 70%)"
+                radius={[4, 4, 0, 0]}
+              />
+              <Bar
+                dataKey={String(currentYear)}
+                fill="hsl(221, 83%, 53%)"
+                radius={[4, 4, 0, 0]}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}

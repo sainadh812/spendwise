@@ -148,3 +148,41 @@ export async function dismissSkippedEmail(id: string) {
   });
   revalidatePath("/");
 }
+
+export async function getTransactionsForYear(year: number) {
+  const start = new Date(year, 0, 1);
+  const end = new Date(year, 11, 31, 23, 59, 59, 999);
+
+  return prisma.transaction.findMany({
+    where: { date: { gte: start, lte: end } },
+    orderBy: { date: "asc" },
+  });
+}
+
+export async function getTransactionsForRange(
+  startDate: Date,
+  endDate: Date
+) {
+  return prisma.transaction.findMany({
+    where: { date: { gte: startDate, lte: endDate } },
+    orderBy: { date: "asc" },
+  });
+}
+
+export async function getAvailableYears(): Promise<number[]> {
+  const rows = await prisma.transaction.findMany({
+    select: { date: true },
+    orderBy: { date: "asc" },
+  });
+
+  const years = new Set<number>();
+  for (const r of rows) {
+    years.add(r.date.getFullYear());
+  }
+
+  if (years.size === 0) {
+    years.add(new Date().getFullYear());
+  }
+
+  return Array.from(years).sort((a, b) => b - a);
+}

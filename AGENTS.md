@@ -3,20 +3,20 @@
 ## Project Overview
 
 Next.js 16 (App Router) expense tracking dashboard. Parses Indian bank alert emails
-via Gmail API + Gemini AI to extract debit transactions. Single-user auth via password.
-Stack: TypeScript, React 19, Prisma 7 (PostgreSQL), Tailwind CSS 4, shadcn/ui (new-york style),
-Vercel AI SDK, NextAuth v5 (beta), Recharts, Zod 4.
+via Gmail API + Gemini AI (`gemini-2.5-flash`) to extract debit transactions. Single-user
+auth via password. Stack: TypeScript, React 19, Prisma 7 (PostgreSQL), Tailwind CSS 4,
+shadcn/ui (new-york style), Vercel AI SDK, NextAuth v5 (beta), Recharts, date-fns, Zod 4.
 
 ## Build / Dev / Lint Commands
 
 ```bash
-npm run dev            # Start dev server (next dev, port 3003)
+npm run dev            # Start dev server (next dev, port 3003, --inspect enabled)
 npm run build          # prisma generate && prisma db push && next build
 npm run lint           # eslint (flat config, next core-web-vitals + typescript)
 npm run start          # next start (production, port 3003)
 npm run db:migrate     # prisma migrate dev
 npm run db:push        # prisma db push
-npm run db:seed        # POST http://localhost:3003/api/seed (dev only)
+npm run db:seed        # curl POST to localhost:3003/api/seed (dev only, server must be running)
 npm run postinstall    # prisma generate
 ```
 
@@ -32,7 +32,7 @@ npm run build          # Full build verification
 
 ### Testing
 
-Vitest 4 with happy-dom environment. Setup file: `src/test-setup.ts` (imports `@testing-library/jest-dom/vitest`).
+Vitest 4 with happy-dom environment. Config: `vitest.config.mts`. Setup: `src/test-setup.ts`.
 
 ```bash
 npm test                              # Run all tests (vitest run)
@@ -43,7 +43,9 @@ npx vitest run -t "parses dd-Mon"     # Run tests matching a name pattern
 
 Test files live next to their source: `src/**/*.test.ts` / `src/**/*.test.tsx`.
 Tests use `describe`/`it`/`expect`/`vi` from `vitest`, `@testing-library/react` for component
-tests, and `@testing-library/user-event` for interactions. Mock modules with `vi.mock()`.
+tests, and `@testing-library/user-event` for interactions. Mock server actions with
+`vi.mock("@/app/actions", ...)`. Use `beforeEach`/`afterEach` with `vi.clearAllMocks()`
+and `cleanup()`. Use `vi.setSystemTime()` / `vi.useRealTimers()` for time mocking.
 
 ## Project Structure
 
@@ -51,44 +53,47 @@ tests, and `@testing-library/user-event` for interactions. Mock modules with `vi
 src/
   app/
     layout.tsx              # Root layout (Geist font)
-    page.tsx                # Main dashboard (RSC, server component)
-    actions.ts              # Server actions (CRUD for transactions/categories)
+    page.tsx                # Main dashboard (RSC)
+    actions.ts              # Server actions (CRUD for transactions/categories/skipped emails)
     globals.css             # Tailwind + shadcn theme variables
     login/page.tsx          # Login page (RSC)
+    analytics/page.tsx      # Analytics page (monthly/yearly views)
     api/
       auth/[...nextauth]/   # NextAuth route handler
-      process-emails/       # Cron endpoint: Gmail -> AI -> DB
+      process-emails/       # Cron endpoint (GET): Gmail -> AI -> DB
       seed/                 # Dev-only seed endpoint
   components/
     ui/                     # shadcn/ui primitives (DO NOT manually edit)
-    *.tsx                   # App-specific client components
+    *.tsx                   # App-specific client components (co-located tests)
   lib/
     auth.ts                 # NextAuth config (credentials provider)
-    prisma.ts               # Prisma client singleton
+    prisma.ts               # Prisma client singleton (supports Prisma Accelerate)
     schemas.ts              # Zod schemas for AI extraction
     categories.ts           # Default category list
+    email.ts                # Email HTML-to-text helpers (html-to-text lib)
+    date-extraction.ts      # Regex date extraction + AI date reconciliation
     utils.ts                # cn() helper (clsx + tailwind-merge)
   middleware.ts             # Auth guard (cookie check, redirect to /login)
   generated/prisma/         # Generated Prisma client (gitignored)
   test-setup.ts             # Vitest global setup (@testing-library/jest-dom)
 prisma/
-  schema.prisma             # DB schema (Category, Transaction models)
+  schema.prisma             # DB schema (Category, Transaction, SkippedEmail)
 ```
 
 ## Code Style Guidelines
 
 ### TypeScript
 
-- Strict mode is enabled (`"strict": true` in tsconfig)
+- Strict mode (`"strict": true` in tsconfig)
 - Use explicit types for function parameters; infer return types when obvious
-- Use `interface` for component props, not `type` (see existing components)
+- Use `interface` for component props, not `type`
 - Path alias: `@/*` maps to `./src/*` — always use `@/` imports, never relative `../`
 
 ### Imports
 
-Order (observed in codebase):
+Order:
 1. React / Next.js framework imports
-2. Third-party libraries (`ai`, `googleapis`, `zod`, `recharts`, `lucide-react`)
+2. Third-party libraries (`ai`, `googleapis`, `zod`, `date-fns`, `recharts`, `lucide-react`)
 3. Internal `@/lib/*` imports
 4. Internal `@/components/ui/*` imports
 5. Internal `@/components/*` imports
@@ -99,9 +104,9 @@ Use named exports for components. Default exports only for Next.js pages/layouts
 ### React / Next.js Patterns
 
 - **Server Components by default** — pages and layouts are RSC (no `"use client"`)
-- **Client components**: Add `"use client"` directive at top of file; used for interactivity
+- **Client components**: `"use client"` directive at top; used for interactivity
 - **Server Actions**: Defined in `src/app/actions.ts` with `"use server"` directive
-- Use `useTransition` for server action calls in client components (not `useState` for loading)
+- Use `useTransition` for server action calls (not `useState` for loading)
 - Use `revalidatePath("/")` after mutations in server actions
 - Use `Promise<>` for `searchParams` type in page components (Next.js 16 async params)
 
@@ -109,19 +114,19 @@ Use named exports for components. Default exports only for Next.js pages/layouts
 
 - Tailwind CSS 4 with CSS variables for theming (defined in `globals.css`)
 - Use `cn()` from `@/lib/utils` for conditional class merging
-- shadcn/ui components live in `src/components/ui/` — add new ones via `npx shadcn add <name>`
+- shadcn/ui components in `src/components/ui/` — add new ones via `npx shadcn add <name>`
 - Do NOT manually edit files in `src/components/ui/`
-- Use Tailwind responsive prefixes (`sm:`, `lg:`) — mobile-first design
-- Color tokens: use semantic names (`bg-background`, `text-muted-foreground`, `text-destructive`)
+- Mobile-first with Tailwind responsive prefixes (`sm:`, `lg:`)
+- Color tokens: semantic names (`bg-background`, `text-muted-foreground`, `text-destructive`)
 
 ### Naming Conventions
 
 - **Files**: kebab-case (`transaction-table.tsx`, `process-emails/`)
 - **Components**: PascalCase (`TransactionTable`, `CategoryPieChart`)
 - **Functions**: camelCase (`formatINR`, `handleSave`, `createTransaction`)
-- **Server actions**: camelCase verbs (`getTransactions`, `approveTransaction`, `deleteTransaction`)
+- **Server actions**: camelCase verbs (`getTransactions`, `approveTransaction`)
 - **Interfaces**: PascalCase, no `I` prefix (`Transaction`, `CategorySelectProps`)
-- **Constants**: UPPER_SNAKE_CASE for module-level (`DEFAULT_CATEGORIES`, `BANK_EMAIL_QUERY`)
+- **Constants**: UPPER_SNAKE_CASE (`DEFAULT_CATEGORIES`, `BANK_EMAIL_QUERY`)
 - **Database fields**: snake_case (`is_cc_payment`, `confidence_score`, `needs_review`)
 - **Test files**: same name as source with `.test.ts`/`.test.tsx` suffix, co-located
 
@@ -134,12 +139,11 @@ Use named exports for components. Default exports only for Next.js pages/layouts
 
 ### Database (Prisma)
 
-- Schema at `prisma/schema.prisma`, client generated to `src/generated/prisma/`
-- Import Prisma client from `@/lib/prisma` (singleton with hot-reload support)
-- Use `@prisma/adapter-pg` for PostgreSQL connection
+- Schema at `prisma/schema.prisma` with 3 models: Category, Transaction, SkippedEmail
+- Client generated to `src/generated/prisma/`, import from `@/generated/prisma/client`
+- Import singleton from `@/lib/prisma` (supports both standard PG and Prisma Accelerate URLs)
 - UUIDs for primary keys (`@id @default(uuid())`)
-- Run `npx prisma generate` after schema changes
-- Run `npm run db:push` to sync schema to database
+- Run `npx prisma generate` after schema changes, `npm run db:push` to sync DB
 
 ### Zod Schemas
 
@@ -151,17 +155,19 @@ Use named exports for components. Default exports only for Next.js pages/layouts
 
 - Never commit `.env` — use `.env.example` as reference
 - Required: `DATABASE_URL`, `AUTH_SECRET`, `AUTH_PASSWORD`
-- For email processing: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`
-- For AI: `GOOGLE_GENERATIVE_AI_API_KEY`
+- Email processing: `GMAIL_CLIENT_ID`, `GMAIL_CLIENT_SECRET`, `GMAIL_REFRESH_TOKEN`
+- AI: `GOOGLE_GENERATIVE_AI_API_KEY`
+- Security: `CRON_SECRET` (bearer token for `/api/process-emails` in production)
+- Optional: `GMAIL_SEARCH_QUERY` (override default email search filter)
 - Access via `process.env.VAR_NAME` (no runtime validation wrapper)
 
 ### Key Patterns
 
-- Currency formatting: `Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" })`
+- Currency: `Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" })`
 - Date locale: `"en-IN"` throughout
-- Serialization: Prisma `Date` objects are serialized to ISO strings before passing to client components
+- Serialization: Prisma `Date` objects serialized to ISO strings before passing to client components
 - CC payments excluded from spend totals (`filter(t => !t.is_cc_payment)`)
-- Transactions with `confidence_score < 0.8` are auto-flagged `needs_review: true`
+- Transactions with `confidence_score < 0.8` auto-flagged `needs_review: true`
 
 ### Security
 

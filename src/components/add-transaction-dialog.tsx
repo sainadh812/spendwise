@@ -21,7 +21,7 @@ import { Plus } from "lucide-react";
 export function AddTransactionDialog({
   categories,
 }: {
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
@@ -31,6 +31,7 @@ export function AddTransactionDialog({
   const [merchant, setMerchant] = useState("");
   const [date, setDate] = useState(today);
   const [category, setCategory] = useState("Food & Dining");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [isCcPayment, setIsCcPayment] = useState(false);
 
   function reset() {
@@ -38,6 +39,7 @@ export function AddTransactionDialog({
     setMerchant("");
     setDate(today);
     setCategory("Food & Dining");
+    setSubcategory(null);
     setIsCcPayment(false);
   }
 
@@ -52,6 +54,7 @@ export function AddTransactionDialog({
         merchant: merchant.trim(),
         date,
         category,
+        subcategory,
         is_cc_payment: isCcPayment,
       });
       reset();
@@ -117,7 +120,12 @@ export function AddTransactionDialog({
             <CategorySelect
               value={category}
               onChange={setCategory}
-              categories={categories}
+              subcategory={subcategory}
+              onSubcategoryChange={setSubcategory}
+              categories={categories.map((categoryItem) => ({
+                name: categoryItem.name,
+                subcategories: categoryItem.subcategories.map((item) => item.name),
+              }))}
               className="h-9 w-full"
             />
           </div>

@@ -36,6 +36,7 @@ interface Transaction {
   merchant: string;
   date: string | Date;
   category: string;
+  subcategory?: string | null;
   is_cc_payment: boolean;
   confidence_score: number;
   needs_review: boolean;
@@ -58,7 +59,8 @@ export function CategoryPieChart({
   const categoryMap = new Map<string, number>();
 
   for (const t of spending) {
-    categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount);
+    const label = t.subcategory ? `${t.category} / ${t.subcategory}` : t.category;
+    categoryMap.set(label, (categoryMap.get(label) || 0) + t.amount);
   }
 
   const data = Array.from(categoryMap.entries())

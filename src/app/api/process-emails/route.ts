@@ -3,9 +3,38 @@ import { google as googleapis } from "googleapis";
 import { google } from "@ai-sdk/google";
 import { generateObject } from "ai";
 import { prisma } from "@/lib/prisma";
+import { buildCategoryPromptText, DEFAULT_CATEGORIES } from "@/lib/categories";
 import { emailBodySnippet, buildEmailText } from "@/lib/email";
 import { transactionSchema } from "@/lib/schemas";
 import { resolveTransactionDate } from "@/lib/date-extraction";
+
+async function getCategoryPromptText(): Promise<string> {
+  const rows = await prisma.category.findMany({
+    where: { parentId: null },
+    orderBy: { name: "asc" },
+    include: {
+      children: {
+        orderBy: { name: "asc" },
+      },
+    },
+  });
+
+  if (rows.length === 0) {
+    return buildCategoryPromptText(
+      DEFAULT_CATEGORIES.map((category) => ({
+        name: category.name,
+        subcategories: category.subcategories ?? [],
+      }))
+    );
+  }
+
+  return buildCategoryPromptText(
+    rows.map((row) => ({
+      name: row.name,
+      subcategories: row.children.map((child) => child.name),
+    }))
+  );
+}
 
 // We use newer_than:2d (not 1d) as a safety buffer.
 // Cron runs at 11:30 PM IST - if an email arrives at 11:35 PM the previous night,
@@ -23,7 +52,7 @@ const BANK_EMAIL_QUERY = [
   ")",
 ].join(" ");
 
-function buildAIPrompt(): string {
+function buildAIPrompt(categoryPromptText: string): string {
   const currentYear = new Date().getFullYear();
   const today = new Date().toISOString().slice(0, 10);
   return `You are a financial transaction parser for Indian bank alert emails.
@@ -62,9 +91,13 @@ Extraction rules:
   Indian bank emails typically use dd-mm-yyyy or dd-mm-yy date formats (day first, then month, then year).
   For 2-digit years (e.g. "23-02-26"), interpret as dd-mm-yy NOT yy-mm-dd — so "23-02-26" means 23 Feb 2026.
   Always pick the most recent valid date (not a future date). Never assume yyyy-mm-dd or mm-dd-yy.
-- category: Best-guess from: Food & Dining, Groceries, Transportation, Shopping, Entertainment, Bills & Utilities, Health & Fitness, Travel, Education, Investment, Insurance, Credit Card Payment, ATM Withdrawal, Transfer, Other.
+- category: Must be one of the categories below.
+- subcategory: Must be one of the listed subcategories for the chosen category, or null if that category has no subcategories.
 - is_cc_payment: true ONLY if paying off a credit card bill (e.g. "CC bill payment"). Regular purchases made with a credit card are false.
 - confidence_score (0.0 to 1.0): Lower if merchant name is unclear/truncated, amount is ambiguous, or you had to guess the category.
+
+Available categories and subcategories:
+${categoryPromptText}
 
 Email content:
 `;
@@ -96,6 +129,7 @@ interface ProcessedEntry {
     merchant: string;
     date: string;
     category: string;
+    subcategory: string | null;
     is_cc_payment: boolean;
     confidence_score: number;
   };
@@ -116,6 +150,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    const categoryPromptText = await getCategoryPromptText();
     const oauth2Client = new googleapis.auth.OAuth2(
       process.env.GMAIL_CLIENT_ID,
       process.env.GMAIL_CLIENT_SECRET,
@@ -174,6 +209,7 @@ export async function GET(request: NextRequest) {
                 merchant: alreadyProcessed.merchant,
                 date: alreadyProcessed.date.toISOString(),
                 category: alreadyProcessed.category,
+                subcategory: null,
                 is_cc_payment: alreadyProcessed.is_cc_payment,
                 confidence_score: alreadyProcessed.confidence_score,
               },
@@ -210,7 +246,7 @@ export async function GET(request: NextRequest) {
         const { object: transaction } = await generateObject({
           model: google("gemini-2.5-flash"),
           schema: transactionSchema,
-          prompt: buildAIPrompt() + emailText,
+          prompt: buildAIPrompt(categoryPromptText) + emailText,
         });
 
         if (transaction.confidence_score === 0) {
@@ -256,6 +292,17 @@ export async function GET(request: NextRequest) {
           status = "duplicate_flagged";
         }
 
+        const parentCategory = await prisma.category.findFirst({
+          where: { name: transaction.category, parentId: null },
+          include: { children: true },
+        });
+
+        const matchedSubcategory = transaction.subcategory
+          ? parentCategory?.children.find(
+              (child) => child.name === transaction.subcategory
+            ) ?? null
+          : null;
+
         if (!dryRun) {
           await prisma.transaction.create({
             data: {
@@ -263,6 +310,8 @@ export async function GET(request: NextRequest) {
               merchant: transaction.merchant,
               date: txDate,
               category: transaction.category,
+              categoryId: parentCategory?.id ?? null,
+              subcategoryId: matchedSubcategory?.id ?? null,
               is_cc_payment: transaction.is_cc_payment,
               confidence_score: transaction.confidence_score,
               needs_review: needsReview,

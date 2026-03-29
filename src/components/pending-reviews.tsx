@@ -38,6 +38,7 @@ interface Transaction {
   merchant: string;
   date: string | Date;
   category: string;
+  subcategory?: string | null;
   is_cc_payment: boolean;
   confidence_score: number;
   needs_review: boolean;
@@ -63,7 +64,7 @@ export function PendingReviews({
   categories,
 }: {
   transactions: Transaction[];
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   const pending = transactions.filter((t) => t.needs_review);
 
@@ -122,10 +123,11 @@ function ReviewRow({
   categories,
 }: {
   transaction: Transaction;
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   const [editing, setEditing] = useState(false);
   const [category, setCategory] = useState(t.category);
+  const [subcategory, setSubcategory] = useState<string | null>(t.subcategory ?? null);
   const [merchant, setMerchant] = useState(t.merchant);
   const [isCcPayment, setIsCcPayment] = useState(t.is_cc_payment);
   const [isPending, startTransition] = useTransition();
@@ -136,7 +138,12 @@ function ReviewRow({
 
   function handleSave() {
     startTransition(async () => {
-      await updateTransaction(t.id, { category, merchant, is_cc_payment: isCcPayment });
+      await updateTransaction(t.id, {
+        category,
+        subcategory,
+        merchant,
+        is_cc_payment: isCcPayment,
+      });
       setEditing(false);
     });
   }
@@ -185,14 +192,21 @@ function ReviewRow({
       </TableCell>
       <TableCell>
         {editing ? (
-          <CategorySelect
-            value={category}
-            onChange={setCategory}
-            categories={categories}
-            className="h-8 w-44"
-          />
+            <CategorySelect
+              value={category}
+              onChange={setCategory}
+              subcategory={subcategory}
+              onSubcategoryChange={setSubcategory}
+              categories={categories.map((categoryItem) => ({
+                name: categoryItem.name,
+                subcategories: categoryItem.subcategories.map((item) => item.name),
+              }))}
+              className="h-8 w-44"
+            />
         ) : (
-          <Badge variant="outline">{t.category}</Badge>
+          <Badge variant="outline">
+            {t.subcategory ? `${t.category} / ${t.subcategory}` : t.category}
+          </Badge>
         )}
       </TableCell>
       <TableCell>

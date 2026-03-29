@@ -18,9 +18,10 @@ afterEach(() => {
 describe("AnalyticsPeriodSelector", () => {
   it("renders Monthly and Yearly toggle buttons", () => {
     render(
-      <AnalyticsPeriodSelector
-        mode="monthly"
-        month={2}
+        <AnalyticsPeriodSelector
+          mode="monthly"
+          categoryMode="combined"
+          month={2}
         year={2026}
         availableYears={[2026, 2025]}
       />
@@ -28,13 +29,37 @@ describe("AnalyticsPeriodSelector", () => {
 
     expect(screen.getByText("Monthly")).toBeInTheDocument();
     expect(screen.getByText("Yearly")).toBeInTheDocument();
+    expect(screen.getByText("Combined")).toBeInTheDocument();
+  });
+
+  it("updates category mode filter", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AnalyticsPeriodSelector
+        mode="monthly"
+        categoryMode="combined"
+        month={2}
+        year={2026}
+        availableYears={[2026, 2025]}
+      />
+    );
+
+    const triggers = screen.getAllByRole("combobox");
+    await user.click(triggers[0]);
+    await user.click(screen.getByText("Parent Categories"));
+
+    expect(mockPush).toHaveBeenCalledWith(
+      expect.stringContaining("category_mode=parent")
+    );
   });
 
   it("displays current month label in monthly mode", () => {
     render(
-      <AnalyticsPeriodSelector
-        mode="monthly"
-        month={2}
+        <AnalyticsPeriodSelector
+          mode="monthly"
+          categoryMode="combined"
+          month={2}
         year={2026}
         availableYears={[2026, 2025]}
       />
@@ -51,9 +76,10 @@ describe("AnalyticsPeriodSelector", () => {
     const user = userEvent.setup();
 
     render(
-      <AnalyticsPeriodSelector
-        mode="monthly"
-        month={2}
+        <AnalyticsPeriodSelector
+          mode="monthly"
+          categoryMode="combined"
+          month={2}
         year={2026}
         availableYears={[2026, 2025]}
       />
@@ -77,9 +103,10 @@ describe("AnalyticsPeriodSelector", () => {
     const user = userEvent.setup();
 
     render(
-      <AnalyticsPeriodSelector
-        mode="monthly"
-        month={0}
+        <AnalyticsPeriodSelector
+          mode="monthly"
+          categoryMode="combined"
+          month={0}
         year={2026}
         availableYears={[2026, 2025]}
       />
@@ -103,9 +130,10 @@ describe("AnalyticsPeriodSelector", () => {
     const now = new Date();
 
     render(
-      <AnalyticsPeriodSelector
-        mode="monthly"
-        month={now.getMonth()}
+        <AnalyticsPeriodSelector
+          mode="monthly"
+          categoryMode="combined"
+          month={now.getMonth()}
         year={now.getFullYear()}
         availableYears={[now.getFullYear()]}
       />
@@ -123,9 +151,10 @@ describe("AnalyticsPeriodSelector", () => {
     const user = userEvent.setup();
 
     render(
-      <AnalyticsPeriodSelector
-        mode="monthly"
-        month={2}
+        <AnalyticsPeriodSelector
+          mode="monthly"
+          categoryMode="combined"
+          month={2}
         year={2026}
         availableYears={[2026, 2025]}
       />
@@ -140,9 +169,10 @@ describe("AnalyticsPeriodSelector", () => {
 
   it("shows year selector in yearly mode", () => {
     render(
-      <AnalyticsPeriodSelector
-        mode="yearly"
-        month={2}
+        <AnalyticsPeriodSelector
+          mode="yearly"
+          categoryMode="combined"
+          month={2}
         year={2026}
         availableYears={[2026, 2025]}
       />
@@ -155,9 +185,10 @@ describe("AnalyticsPeriodSelector", () => {
     const now = new Date();
 
     render(
-      <AnalyticsPeriodSelector
-        mode="yearly"
-        month={0}
+        <AnalyticsPeriodSelector
+          mode="yearly"
+          categoryMode="combined"
+          month={0}
         year={now.getFullYear()}
         availableYears={[now.getFullYear(), now.getFullYear() - 1]}
       />
@@ -175,9 +206,10 @@ describe("AnalyticsPeriodSelector", () => {
     const user = userEvent.setup();
 
     render(
-      <AnalyticsPeriodSelector
-        mode="yearly"
-        month={0}
+        <AnalyticsPeriodSelector
+          mode="yearly"
+          categoryMode="combined"
+          month={0}
         year={2026}
         availableYears={[2026, 2025]}
       />

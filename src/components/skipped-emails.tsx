@@ -41,7 +41,7 @@ export function SkippedEmails({
   categories,
 }: {
   skippedEmails: SkippedEmail[];
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   if (skippedEmails.length === 0) {
     return (
@@ -101,7 +101,7 @@ function SkippedEmailRow({
   categories,
 }: {
   email: SkippedEmail;
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   const [showDetails, setShowDetails] = useState(false);
   const [showRecover, setShowRecover] = useState(false);
@@ -112,6 +112,7 @@ function SkippedEmailRow({
   const [merchant, setMerchant] = useState("");
   const [date, setDate] = useState(today);
   const [category, setCategory] = useState("Other");
+  const [subcategory, setSubcategory] = useState<string | null>(null);
   const [isCcPayment] = useState(false);
 
   function handleDismiss() {
@@ -129,6 +130,7 @@ function SkippedEmailRow({
         merchant: merchant.trim(),
         date,
         category,
+        subcategory,
         is_cc_payment: isCcPayment,
       });
       setShowRecover(false);
@@ -312,7 +314,12 @@ function SkippedEmailRow({
               <CategorySelect
                 value={category}
                 onChange={setCategory}
-                categories={categories}
+                subcategory={subcategory}
+                onSubcategoryChange={setSubcategory}
+                categories={categories.map((categoryItem) => ({
+                  name: categoryItem.name,
+                  subcategories: categoryItem.subcategories.map((item) => item.name),
+                }))}
                 className="h-9 w-full"
               />
             </div>

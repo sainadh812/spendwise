@@ -40,7 +40,29 @@ export interface AnalyticsTransaction {
   merchant: string;
   date: string;
   category: string;
+  subcategory?: string | null;
   is_cc_payment: boolean;
+}
+
+export type AnalyticsCategoryMode = "parent" | "subcategory" | "combined";
+
+function getCategoryLabel(
+  transaction: AnalyticsTransaction,
+  mode: AnalyticsCategoryMode
+): string | null {
+  if (mode === "parent") {
+    return transaction.category;
+  }
+
+  if (mode === "subcategory") {
+    return transaction.subcategory
+      ? `${transaction.category} / ${transaction.subcategory}`
+      : null;
+  }
+
+  return transaction.subcategory
+    ? `${transaction.category} / ${transaction.subcategory}`
+    : transaction.category;
 }
 
 function formatINR(value: number) {
@@ -130,14 +152,18 @@ export function MonthlyTrendChart({
 
 export function AnalyticsPieChart({
   transactions,
+  mode = "combined",
 }: {
   transactions: AnalyticsTransaction[];
+  mode?: AnalyticsCategoryMode;
 }) {
   const spending = transactions.filter((t) => !t.is_cc_payment);
   const categoryMap = new Map<string, number>();
 
   for (const t of spending) {
-    categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount);
+    const label = getCategoryLabel(t, mode);
+    if (!label) continue;
+    categoryMap.set(label, (categoryMap.get(label) || 0) + t.amount);
   }
 
   const data = Array.from(categoryMap.entries())
@@ -193,6 +219,95 @@ export function AnalyticsPieChart({
               ))}
             </div>
           </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ParentCategoryPieChart({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+  const categoryMap = new Map<string, number>();
+
+  for (const transaction of spending) {
+    categoryMap.set(
+      transaction.category,
+      (categoryMap.get(transaction.category) || 0) + transaction.amount
+    );
+  }
+
+  const data = Array.from(categoryMap.entries())
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value - a.value);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Parent Category Breakdown</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No spending data" />
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <PieChart>
+              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value">
+                {data.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value) => formatINR(Number(value))} />
+            </PieChart>
+          </ResponsiveContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function SubcategoryComparisonChart({
+  transactions,
+}: {
+  transactions: AnalyticsTransaction[];
+}) {
+  const spending = transactions.filter((t) => !t.is_cc_payment && t.subcategory);
+  const subcategoryMap = new Map<string, number>();
+
+  for (const transaction of spending) {
+    const label = `${transaction.category} / ${transaction.subcategory}`;
+    subcategoryMap.set(label, (subcategoryMap.get(label) || 0) + transaction.amount);
+  }
+
+  const data = Array.from(subcategoryMap.entries())
+    .map(([category, amount]) => ({ category, amount }))
+    .sort((a, b) => b.amount - a.amount);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Top Subcategories</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {data.length === 0 ? (
+          <EmptyState message="No subcategory data" />
+        ) : (
+          <ResponsiveContainer width="100%" height={Math.max(300, data.length * 40)}>
+            <BarChart data={data} layout="vertical" margin={{ left: 20 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+              <XAxis type="number" fontSize={12} tickLine={false} tickFormatter={formatCompact} />
+              <YAxis type="category" dataKey="category" fontSize={12} tickLine={false} width={180} />
+              <Tooltip formatter={(value) => [formatINR(Number(value)), "Spent"]} />
+              <Bar dataKey="amount" radius={[0, 4, 4, 0]}>
+                {data.map((_, i) => (
+                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
         )}
       </CardContent>
     </Card>
@@ -266,14 +381,18 @@ export function AnalyticsDailyBarChart({
 
 export function CategoryComparisonChart({
   transactions,
+  mode = "combined",
 }: {
   transactions: AnalyticsTransaction[];
+  mode?: AnalyticsCategoryMode;
 }) {
   const spending = transactions.filter((t) => !t.is_cc_payment);
   const categoryMap = new Map<string, number>();
 
   for (const t of spending) {
-    categoryMap.set(t.category, (categoryMap.get(t.category) || 0) + t.amount);
+    const label = getCategoryLabel(t, mode);
+    if (!label) continue;
+    categoryMap.set(label, (categoryMap.get(label) || 0) + t.amount);
   }
 
   const data = Array.from(categoryMap.entries())
@@ -327,13 +446,18 @@ export function CategoryComparisonChart({
 
 export function StackedAreaChart({
   transactions,
+  mode = "combined",
 }: {
   transactions: AnalyticsTransaction[];
+  mode?: AnalyticsCategoryMode;
 }) {
   const spending = transactions.filter((t) => !t.is_cc_payment);
 
   const categories = new Set<string>();
-  for (const t of spending) categories.add(t.category);
+  for (const t of spending) {
+    const label = getCategoryLabel(t, mode);
+    if (label) categories.add(label);
+  }
 
   const dailyCategory = new Map<string, Map<string, number>>();
   for (const t of spending) {
@@ -343,7 +467,9 @@ export function StackedAreaChart({
     });
     if (!dailyCategory.has(day)) dailyCategory.set(day, new Map());
     const dayMap = dailyCategory.get(day)!;
-    dayMap.set(t.category, (dayMap.get(t.category) || 0) + t.amount);
+    const label = getCategoryLabel(t, mode);
+    if (!label) continue;
+    dayMap.set(label, (dayMap.get(label) || 0) + t.amount);
   }
 
   const sortedCategories = Array.from(categories);

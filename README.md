@@ -81,6 +81,7 @@ Edit `.env` with your values. See [`.env.example`](.env.example) for detailed de
 ```bash
 npx prisma generate
 npx prisma db push
+npm run db:sync-categories
 ```
 
 ### 4. Run the dev server
@@ -132,10 +133,20 @@ Supports `?dry_run=true` to preview without saving and `?verbose=true` for detai
 Deploy to any platform that supports Next.js. For Vercel:
 
 ```bash
-npm run build   # Runs: prisma generate && prisma db push && next build
+npm run build
 ```
 
 Set all environment variables from `.env.example` in your deployment platform's settings.
+
+Important:
+
+- `npm run build` is the canonical production-safe deployment command.
+- It runs `prisma generate`, `prisma migrate deploy`, category sync, and `next build`.
+- Do not use `prisma db push` in production.
+- Run `npm run db:sync-categories` after introducing new default categories if needed.
+- Run `npm run db:backfill-categories:dry` and `npm run db:backfill-categories` when upgrading older installs that predate category hierarchy support.
+
+See `DEPLOYMENT.md` and `UPGRADING.md` for the full deployment and upgrade standard.
 
 ## License
 

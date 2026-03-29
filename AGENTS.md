@@ -11,7 +11,7 @@ shadcn/ui (new-york style), Vercel AI SDK, NextAuth v5 (beta), Recharts, date-fn
 
 ```bash
 npm run dev            # Start dev server (next dev, port 3003, --inspect enabled)
-npm run build          # prisma generate && prisma db push && next build
+npm run build          # prisma generate && prisma migrate deploy && sync categories && next build
 npm run lint           # eslint (flat config, next core-web-vitals + typescript)
 npm run start          # next start (production, port 3003)
 npm run db:migrate     # prisma migrate dev

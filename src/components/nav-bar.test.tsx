@@ -14,11 +14,12 @@ afterEach(() => {
 });
 
 describe("NavBar", () => {
-  it("renders Dashboard and Analytics links", () => {
+  it("renders Dashboard, Analytics and Categories links", () => {
     render(<NavBar />);
 
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
     expect(screen.getByText("Analytics")).toBeInTheDocument();
+    expect(screen.getByText("Categories")).toBeInTheDocument();
   });
 
   it("renders links with correct hrefs", () => {
@@ -26,9 +27,11 @@ describe("NavBar", () => {
 
     const dashboardLink = screen.getByText("Dashboard").closest("a");
     const analyticsLink = screen.getByText("Analytics").closest("a");
+    const categoriesLink = screen.getByText("Categories").closest("a");
 
     expect(dashboardLink).toHaveAttribute("href", "/");
     expect(analyticsLink).toHaveAttribute("href", "/analytics");
+    expect(categoriesLink).toHaveAttribute("href", "/categories");
   });
 
   it("highlights Dashboard when on root path", () => {
@@ -54,10 +57,18 @@ describe("NavBar", () => {
   });
 
   it("highlights Analytics for nested analytics paths", () => {
-    mockPathname = "/analytics?view=yearly&year=2025";
+    mockPathname = "/analytics/history";
     render(<NavBar />);
 
     const analyticsLink = screen.getByText("Analytics").closest("a");
     expect(analyticsLink?.className).toContain("bg-primary");
+  });
+
+  it("highlights Categories for nested category paths", () => {
+    mockPathname = "/categories/manage";
+    render(<NavBar />);
+
+    const categoriesLink = screen.getByText("Categories").closest("a");
+    expect(categoriesLink?.className).toContain("bg-primary");
   });
 });

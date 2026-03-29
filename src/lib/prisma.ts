@@ -10,7 +10,16 @@ function createClient() {
   if (url.startsWith("prisma+")) {
     return new PrismaClient({ accelerateUrl: url });
   }
-  return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
+
+  const parsedUrl = new URL(url);
+  const schema = parsedUrl.searchParams.get("schema");
+
+  return new PrismaClient({
+    adapter: new PrismaPg(
+      { connectionString: parsedUrl.toString() },
+      schema ? { schema } : undefined
+    ),
+  });
 }
 
 export const prisma = globalForPrisma.prisma ?? createClient();

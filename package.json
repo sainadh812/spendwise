@@ -1,16 +1,19 @@
 {
   "name": "expense_tracker",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "scripts": {
     "dev": "NODE_OPTIONS='--inspect' next dev -p 3003",
-    "build": "prisma generate && prisma db push && next build",
+    "build": "prisma generate && prisma migrate deploy && node scripts/sync-categories.mjs && next build",
     "start": "next start -p 3003",
     "lint": "eslint",
     "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
+    "db:backfill-categories": "node scripts/backfill-category-refs.mjs",
+    "db:backfill-categories:dry": "node scripts/backfill-category-refs.mjs --dry-run",
     "db:seed": "curl -X POST http://localhost:3003/api/seed",
+    "db:sync-categories": "node scripts/sync-categories.mjs",
     "test": "vitest run",
     "test:watch": "vitest"
   },

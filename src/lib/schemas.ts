@@ -11,7 +11,13 @@ export const transactionSchema = z.object({
   category: z
     .string()
     .describe(
-      "Category of the transaction. Common categories: Food & Dining, Groceries, Transportation, Shopping, Entertainment, Bills & Utilities, Health & Fitness, Travel, Education, Credit Card Payment, ATM Withdrawal, Transfer, Other"
+      "Category of the transaction. Must be one of the categories provided in the prompt."
+    ),
+  subcategory: z
+    .string()
+    .nullable()
+    .describe(
+      "Subcategory of the transaction. Must be one of the subcategories for the chosen category as provided in the prompt, or null if no subcategories exist for that category."
     ),
   is_cc_payment: z
     .boolean()

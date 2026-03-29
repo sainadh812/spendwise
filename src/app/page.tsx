@@ -1,6 +1,6 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getTransactions, getCategories, getSkippedEmails } from "./actions";
+import { getTransactions, getCategoriesWithSubs, getSkippedEmails } from "./actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -39,7 +39,7 @@ export default async function Dashboard({
 
   const [transactions, categories, skippedEmails] = await Promise.all([
     getTransactions(month, year),
-    getCategories(),
+    getCategoriesWithSubs(),
     getSkippedEmails(),
   ] as const);
 
@@ -57,6 +57,7 @@ export default async function Dashboard({
   const serialized = transactions.map((t) => ({
     ...t,
     date: t.date.toISOString(),
+    subcategory: t.subcategoryRef?.name ?? null,
   }));
 
   const serializedSkipped = skippedEmails.map((s) => ({

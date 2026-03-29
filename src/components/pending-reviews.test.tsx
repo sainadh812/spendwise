@@ -21,7 +21,11 @@ const mockTransaction = {
   remarks: null,
 };
 
-const categories = ["Shopping", "Food", "Transport"];
+const categories = [
+  { name: "Shopping", subcategories: [] },
+  { name: "Food", subcategories: [] },
+  { name: "Transport", subcategories: [] },
+];
 
 beforeEach(() => {
   vi.clearAllMocks();

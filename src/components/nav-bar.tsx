@@ -3,11 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { BarChart3, LayoutDashboard } from "lucide-react";
+import { BarChart3, FolderTree, LayoutDashboard } from "lucide-react";
 
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/categories", label: "Categories", icon: FolderTree },
 ];
 
 export function NavBar() {

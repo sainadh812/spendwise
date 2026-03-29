@@ -8,26 +8,40 @@ datasource db {
 }
 
 model Category {
-  id   String @id @default(uuid())
-  name String @unique
+  id        String     @id @default(uuid())
+  name      String
+  parentId  String?
+  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children  Category[] @relation("CategoryHierarchy")
+
+  transactionsAsCategory    Transaction[] @relation("TransactionCategory")
+  transactionsAsSubcategory Transaction[] @relation("TransactionSubcategory")
+
+  @@unique([name, parentId])
 }
 
 model Transaction {
-  id               String   @id @default(uuid())
+  id               String    @id @default(uuid())
   amount           Float
   merchant         String
   date             DateTime
   category         String
-  is_cc_payment    Boolean  @default(false)
+  categoryId       String?
+  subcategoryId    String?
+  categoryRef      Category? @relation("TransactionCategory", fields: [categoryId], references: [id])
+  subcategoryRef   Category? @relation("TransactionSubcategory", fields: [subcategoryId], references: [id])
+  is_cc_payment    Boolean   @default(false)
   confidence_score Float
-  needs_review     Boolean  @default(true)
-  email_message_id String?  @unique
+  needs_review     Boolean   @default(true)
+  email_message_id String?   @unique
   remarks          String?
-  source           String   @default("email")
-  created_at       DateTime @default(now())
-  updated_at       DateTime @updatedAt
+  source           String    @default("email")
+  created_at       DateTime  @default(now())
+  updated_at       DateTime  @updatedAt
 
   @@index([amount, merchant, date], name: "idx_dedup")
+  @@index([categoryId])
+  @@index([subcategoryId])
 }
 
 model SkippedEmail {

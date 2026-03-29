@@ -13,8 +13,10 @@ import { AnalyticsStats } from "@/components/analytics-stats";
 import {
   MonthlyTrendChart,
   AnalyticsPieChart,
+  ParentCategoryPieChart,
   AnalyticsDailyBarChart,
   CategoryComparisonChart,
+  SubcategoryComparisonChart,
   StackedAreaChart,
   TopMerchantsChart,
   WeekdayHeatmap,
@@ -35,7 +37,7 @@ function computeStats(
 }
 
 function serialize(
-  transactions: { id: string; amount: number; merchant: string; date: Date; category: string; is_cc_payment: boolean; confidence_score: number; needs_review: boolean; email_message_id: string | null; remarks: string | null; source: string; created_at: Date; updated_at: Date }[]
+  transactions: { id: string; amount: number; merchant: string; date: Date; category: string; subcategoryRef?: { name: string } | null; is_cc_payment: boolean; confidence_score: number; needs_review: boolean; email_message_id: string | null; remarks: string | null; source: string; created_at: Date; updated_at: Date }[]
 ) {
   return transactions.map((t) => ({
     id: t.id,
@@ -43,6 +45,7 @@ function serialize(
     merchant: t.merchant,
     date: t.date.toISOString(),
     category: t.category,
+    subcategory: t.subcategoryRef?.name ?? null,
     is_cc_payment: t.is_cc_payment,
   }));
 }
@@ -52,6 +55,7 @@ export default async function AnalyticsPage({
 }: {
   searchParams: Promise<{
     view?: string;
+    category_mode?: string;
     month?: string;
     year?: string;
   }>;
@@ -62,6 +66,12 @@ export default async function AnalyticsPage({
   const params = await searchParams;
   const now = new Date();
   const mode = params.view === "yearly" ? "yearly" : "monthly";
+  const categoryMode =
+    params.category_mode === "parent" ||
+    params.category_mode === "subcategory" ||
+    params.category_mode === "combined"
+      ? params.category_mode
+      : "combined";
   const month =
     params.month !== undefined ? parseInt(params.month, 10) : now.getMonth();
   const year =
@@ -132,6 +142,7 @@ export default async function AnalyticsPage({
 
           <AnalyticsPeriodSelector
             mode={mode}
+            categoryMode={categoryMode}
             month={month}
             year={year}
             availableYears={availableYears}
@@ -155,8 +166,19 @@ export default async function AnalyticsPage({
           <MonthlyTrendChart transactions={yearSerialized} year={year} />
 
           <div className="grid gap-6 lg:grid-cols-2">
-            <AnalyticsPieChart transactions={current} />
+            {categoryMode === "combined" ? (
+              <ParentCategoryPieChart transactions={current} />
+            ) : null}
+            <AnalyticsPieChart transactions={current} mode={categoryMode} />
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
             <TopMerchantsChart transactions={current} />
+            {categoryMode === "subcategory" || categoryMode === "combined" ? (
+              <SubcategoryComparisonChart transactions={current} />
+            ) : (
+              <CategoryComparisonChart transactions={current} mode={categoryMode} />
+            )}
           </div>
 
           <div className="grid gap-6 lg:grid-cols-2">
@@ -164,9 +186,9 @@ export default async function AnalyticsPage({
             <WeekdayHeatmap transactions={current} />
           </div>
 
-          <CategoryComparisonChart transactions={current} />
+          <CategoryComparisonChart transactions={current} mode={categoryMode} />
 
-          <StackedAreaChart transactions={current} />
+          <StackedAreaChart transactions={current} mode={categoryMode} />
 
           <YearOverYearChart
             currentTransactions={yearSerialized}
@@ -219,11 +241,12 @@ export default async function AnalyticsPage({
           </p>
         </div>
 
-        <AnalyticsPeriodSelector
-          mode={mode}
-          month={month}
-          year={year}
-          availableYears={availableYears}
+          <AnalyticsPeriodSelector
+            mode={mode}
+            categoryMode={categoryMode}
+            month={month}
+            year={year}
+            availableYears={availableYears}
         />
 
         <AnalyticsStats
@@ -243,19 +266,33 @@ export default async function AnalyticsPage({
 
         <MonthlyTrendChart transactions={yearSerialized} year={year} />
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <AnalyticsPieChart transactions={yearSerialized} />
-          <TopMerchantsChart transactions={yearSerialized} />
-        </div>
+          <div className="grid gap-6 lg:grid-cols-2">
+            {categoryMode === "combined" ? (
+              <ParentCategoryPieChart transactions={yearSerialized} />
+            ) : null}
+            <AnalyticsPieChart transactions={yearSerialized} mode={categoryMode} />
+          </div>
+
+          <div className="grid gap-6 lg:grid-cols-2">
+            <TopMerchantsChart transactions={yearSerialized} />
+            {categoryMode === "subcategory" || categoryMode === "combined" ? (
+              <SubcategoryComparisonChart transactions={yearSerialized} />
+            ) : (
+              <CategoryComparisonChart
+                transactions={yearSerialized}
+                mode={categoryMode}
+              />
+            )}
+          </div>
 
         <div className="grid gap-6 lg:grid-cols-2">
           <AnalyticsDailyBarChart transactions={yearSerialized} />
           <WeekdayHeatmap transactions={yearSerialized} />
         </div>
 
-        <CategoryComparisonChart transactions={yearSerialized} />
+        <CategoryComparisonChart transactions={yearSerialized} mode={categoryMode} />
 
-        <StackedAreaChart transactions={yearSerialized} />
+        <StackedAreaChart transactions={yearSerialized} mode={categoryMode} />
 
         <YearOverYearChart
           currentTransactions={yearSerialized}

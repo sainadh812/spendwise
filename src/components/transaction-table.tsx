@@ -35,6 +35,7 @@ interface Transaction {
   merchant: string;
   date: string | Date;
   category: string;
+  subcategory?: string | null;
   is_cc_payment: boolean;
   confidence_score: number;
   needs_review: boolean;
@@ -54,7 +55,7 @@ export function TransactionTable({
   categories,
 }: {
   transactions: Transaction[];
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   if (transactions.length === 0) {
     return (
@@ -107,12 +108,13 @@ function TransactionRow({
   categories,
 }: {
   transaction: Transaction;
-  categories: string[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
 }) {
   const [editing, setEditing] = useState(false);
   const [merchant, setMerchant] = useState(t.merchant);
   const [amount, setAmount] = useState(String(t.amount));
   const [category, setCategory] = useState(t.category);
+  const [subcategory, setSubcategory] = useState<string | null>(t.subcategory ?? null);
   const [remarks, setRemarks] = useState(t.remarks ?? "");
   const [isCcPayment, setIsCcPayment] = useState(t.is_cc_payment);
   const [isPending, startTransition] = useTransition();
@@ -123,6 +125,7 @@ function TransactionRow({
         merchant,
         amount: parseFloat(amount),
         category,
+        subcategory,
         remarks: remarks.trim() || null,
         is_cc_payment: isCcPayment,
       });
@@ -138,6 +141,7 @@ function TransactionRow({
     setMerchant(t.merchant);
     setAmount(String(t.amount));
     setCategory(t.category);
+    setSubcategory(t.subcategory ?? null);
     setRemarks(t.remarks ?? "");
     setIsCcPayment(t.is_cc_payment);
     setEditing(false);
@@ -195,14 +199,21 @@ function TransactionRow({
       </TableCell>
       <TableCell>
         {editing ? (
-          <CategorySelect
-            value={category}
-            onChange={setCategory}
-            categories={categories}
-            className="h-8 w-44"
-          />
+            <CategorySelect
+              value={category}
+              onChange={setCategory}
+              subcategory={subcategory}
+              onSubcategoryChange={setSubcategory}
+              categories={categories.map((categoryItem) => ({
+                name: categoryItem.name,
+                subcategories: categoryItem.subcategories.map((item) => item.name),
+              }))}
+              className="h-8 w-44"
+            />
         ) : (
-          <Badge variant="outline">{t.category}</Badge>
+          <Badge variant="outline">
+            {t.subcategory ? `${t.category} / ${t.subcategory}` : t.category}
+          </Badge>
         )}
       </TableCell>
       <TableCell>

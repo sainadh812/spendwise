@@ -1,6 +1,5 @@
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { Client } from "pg";
+import { randomUUID } from "node:crypto";
 
 const DEFAULT_CATEGORIES = [
   { name: "ATM Withdrawal" },
@@ -21,45 +20,54 @@ const DEFAULT_CATEGORIES = [
 ];
 
 async function main() {
+  const client = new Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+
   let createdParents = 0;
   let createdSubcategories = 0;
 
-  for (const category of DEFAULT_CATEGORIES) {
-    let parent = await prisma.category.findFirst({
-      where: { name: category.name, parentId: null },
-    });
+  try {
+    for (const category of DEFAULT_CATEGORIES) {
+      let parentResult = await client.query(
+        'SELECT id FROM "Category" WHERE name = $1 AND "parentId" IS NULL LIMIT 1',
+        [category.name]
+      );
 
-    if (!parent) {
-      parent = await prisma.category.create({
-        data: { name: category.name, parentId: null },
-      });
-      createdParents += 1;
-    }
+      let parentId = parentResult.rows[0]?.id;
+      if (!parentId) {
+        parentId = randomUUID();
+        await client.query(
+          'INSERT INTO "Category" (id, name, "parentId") VALUES ($1, $2, $3)',
+          [parentId, category.name, null]
+        );
+        createdParents += 1;
+      }
 
-    for (const subcategory of category.subcategories ?? []) {
-      const existing = await prisma.category.findFirst({
-        where: { name: subcategory, parentId: parent.id },
-      });
+      for (const subcategory of category.subcategories ?? []) {
+        const existing = await client.query(
+          'SELECT id FROM "Category" WHERE name = $1 AND "parentId" = $2 LIMIT 1',
+          [subcategory, parentId]
+        );
 
-      if (!existing) {
-        await prisma.category.create({
-          data: { name: subcategory, parentId: parent.id },
-        });
-        createdSubcategories += 1;
+        if (existing.rowCount === 0) {
+          await client.query(
+            'INSERT INTO "Category" (id, name, "parentId") VALUES ($1, $2, $3)',
+            [randomUUID(), subcategory, parentId]
+          );
+          createdSubcategories += 1;
+        }
       }
     }
-  }
 
-  console.log(
-    `Category sync complete. Created ${createdParents} parent categories and ${createdSubcategories} subcategories.`
-  );
+    console.log(
+      `Category sync complete. Created ${createdParents} parent categories and ${createdSubcategories} subcategories.`
+    );
+  } finally {
+    await client.end();
+  }
 }
 
-main()
-  .catch((error) => {
-    console.error(error);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

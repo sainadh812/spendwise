@@ -34,3 +34,13 @@ export const transactionSchema = z.object({
 });
 
 export type TransactionInput = z.infer<typeof transactionSchema>;
+
+export const batchTransactionSchema = z.object({
+  transactions: z
+    .array(transactionSchema)
+    .describe(
+      "Array of transactions extracted from the text. Each line or sentence describing an expense should be a separate transaction."
+    ),
+});
+
+export type BatchTransactionInput = z.infer<typeof batchTransactionSchema>;

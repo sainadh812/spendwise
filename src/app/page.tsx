@@ -11,7 +11,7 @@ import { TransactionTable } from "@/components/transaction-table";
 import { SkippedEmails } from "@/components/skipped-emails";
 import { SeedButton } from "@/components/seed-button";
 import { MonthSwitcher } from "@/components/month-switcher";
-import { AddTransactionDialog } from "@/components/add-transaction-dialog";
+import { AddExpenseDialog } from "@/components/add-expense-dialog";
 import { NavBar } from "@/components/nav-bar";
 
 function formatINR(value: number) {
@@ -74,7 +74,7 @@ export default async function Dashboard({
             <NavBar />
           </div>
           <div className="flex items-center gap-3">
-            <AddTransactionDialog categories={categories} />
+            <AddExpenseDialog />
             <form
               action={async () => {
                 "use server";

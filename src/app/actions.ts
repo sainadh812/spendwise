@@ -407,3 +407,66 @@ export async function getAvailableYears(): Promise<number[]> {
 
   return Array.from(years).sort((a, b) => b - a);
 }
+
+export async function parseExpenseText(text: string) {
+  const { google } = await import("@ai-sdk/google");
+  const { generateObject } = await import("ai");
+  const { batchTransactionSchema } = await import("@/lib/schemas");
+  const { buildCategoryPromptText } = await import("@/lib/categories");
+  const { resolveTransactionDate } = await import("@/lib/date-extraction");
+
+  const categoryData = await getCategoryPromptData();
+  const categoryPromptText = buildCategoryPromptText(categoryData);
+
+  const currentYear = new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const prompt = `You are a financial transaction parser for natural language expense text and bank alert emails.
+Extract ALL DEBIT (money going out) transactions from the user's text.
+
+IMPORTANT: The text may contain multiple transactions or multiple bank alert emails. Extract each one as a separate transaction in the array.
+- The user may paste multiple bank alert emails (from HDFC, IDFC FIRST Bank, etc.) separated by blank lines or headers like "Dear Cardmember"
+- Each email typically describes one transaction, but there could be multiple emails
+- Also handle natural text with multiple expenses separated by newlines, semicolons, commas, or "and"
+- Each distinct expense or email alert should be a separate transaction
+- If only one expense is described, return an array with one transaction
+
+Extraction rules for each transaction:
+- amount: The amount in INR. Look for "Rs.", "INR", "Rs", or just a number.
+- merchant: The merchant/payee name (e.g. "Swiggy", "Zomato", "Amazon").
+- date: Transaction date in ISO 8601 format (YYYY-MM-DDT00:00:00Z, always UTC with Z suffix).
+  Today's date is ${today} and the current year is ${currentYear}.
+  If no date is mentioned, use today's date.
+  Support formats like "today", "yesterday", "23 Feb", "23-02-2026", "23/02/2026".
+  Indian formats use dd-mm-yyyy or dd-mm-yy (day first).
+  For 2-digit years (e.g. "23-02-26"), interpret as dd-mm-yy — so "23-02-26" means 23 Feb 2026.
+- category: Must be one of the categories below.
+- subcategory: Must be one of the listed subcategories for the chosen category, or null.
+- is_cc_payment: true ONLY if explicitly paying off a credit card bill. Regular purchases are false.
+- confidence_score (0.0 to 1.0): Lower if amount/merchant/category is unclear or guessed.
+
+Available categories and subcategories:
+${categoryPromptText}
+
+User text:
+${text}`;
+
+  const { object: result } = await generateObject({
+    model: google("gemini-2.5-flash"),
+    schema: batchTransactionSchema,
+    prompt,
+  });
+
+  return result.transactions.map((transaction) => {
+    const resolvedDate = resolveTransactionDate(transaction.date, text);
+    return {
+      amount: transaction.amount,
+      merchant: transaction.merchant,
+      date: resolvedDate.toISOString(),
+      category: transaction.category,
+      subcategory: transaction.subcategory,
+      is_cc_payment: transaction.is_cc_payment,
+      confidence_score: transaction.confidence_score,
+    };
+  });
+}

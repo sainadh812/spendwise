@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
   PieChart,
   Pie,
@@ -18,6 +19,7 @@ import {
   Area,
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 
 const COLORS = [
   "hsl(221, 83%, 53%)",
@@ -157,6 +159,7 @@ export function AnalyticsPieChart({
   transactions: AnalyticsTransaction[];
   mode?: AnalyticsCategoryMode;
 }) {
+  const [showAmount, setShowAmount] = useState(false);
   const spending = transactions.filter((t) => !t.is_cc_payment);
   const categoryMap = new Map<string, number>();
 
@@ -174,8 +177,26 @@ export function AnalyticsPieChart({
 
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Category Breakdown</CardTitle>
+        <div className="flex gap-1 rounded-lg border p-0.5">
+          <Button
+            variant={showAmount ? "ghost" : "secondary"}
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setShowAmount(false)}
+          >
+            %
+          </Button>
+          <Button
+            variant={showAmount ? "secondary" : "ghost"}
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setShowAmount(true)}
+          >
+            ₹
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
@@ -213,7 +234,9 @@ export function AnalyticsPieChart({
                     {item.name}
                   </span>
                   <span className="ml-auto font-medium">
-                    {((item.value / total) * 100).toFixed(0)}%
+                    {showAmount
+                      ? formatINR(item.value)
+                      : `${((item.value / total) * 100).toFixed(0)}%`}
                   </span>
                 </div>
               ))}
@@ -230,6 +253,7 @@ export function ParentCategoryPieChart({
 }: {
   transactions: AnalyticsTransaction[];
 }) {
+  const [showAmount, setShowAmount] = useState(false);
   const spending = transactions.filter((t) => !t.is_cc_payment);
   const categoryMap = new Map<string, number>();
 
@@ -244,25 +268,73 @@ export function ParentCategoryPieChart({
     .map(([name, value]) => ({ name, value }))
     .sort((a, b) => b.value - a.value);
 
+  const total = data.reduce((s, d) => s + d.value, 0);
+
   return (
     <Card>
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle>Parent Category Breakdown</CardTitle>
+        <div className="flex gap-1 rounded-lg border p-0.5">
+          <Button
+            variant={showAmount ? "ghost" : "secondary"}
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setShowAmount(false)}
+          >
+            %
+          </Button>
+          <Button
+            variant={showAmount ? "secondary" : "ghost"}
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={() => setShowAmount(true)}
+          >
+            ₹
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {data.length === 0 ? (
           <EmptyState message="No spending data" />
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <PieChart>
-              <Pie data={data} cx="50%" cy="50%" innerRadius={60} outerRadius={100} dataKey="value">
-                {data.map((_, i) => (
-                  <Cell key={i} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(value) => formatINR(Number(value))} />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="flex flex-col items-center gap-4">
+            <ResponsiveContainer width="100%" height={280}>
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={100}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {data.map((_, i) => (
+                    <Cell key={i} fill={COLORS[i % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => formatINR(Number(value))} />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="grid w-full grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+              {data.map((item, i) => (
+                <div key={item.name} className="flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                  />
+                  <span className="truncate text-muted-foreground">
+                    {item.name}
+                  </span>
+                  <span className="ml-auto font-medium">
+                    {showAmount
+                      ? formatINR(item.value)
+                      : `${((item.value / total) * 100).toFixed(0)}%`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

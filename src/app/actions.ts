@@ -510,3 +510,140 @@ ${text}`;
     };
   });
 }
+
+export async function parseImportSheet(
+  rows: string[][],
+  sheetName: string,
+  detectedMonth?: number,
+  detectedYear?: number
+) {
+  const { google } = await import("@ai-sdk/google");
+  const { generateObject } = await import("ai");
+  const { batchTransactionSchema } = await import("@/lib/schemas");
+  const { buildCategoryPromptText } = await import("@/lib/categories");
+
+  const categoryData = await getCategoryPromptData();
+  const categoryPromptText = buildCategoryPromptText(categoryData);
+
+  const currentYear = new Date().getFullYear();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const headers = rows[0]?.join(" | ") ?? "";
+  const dataRows = rows
+    .slice(1)
+    .filter((row) => row.some((cell) => cell.trim() !== ""))
+    .map((row) => row.join(" | "))
+    .join("\n");
+
+  const monthHint =
+    detectedMonth !== undefined && detectedYear !== undefined
+      ? `The sheet is labeled "${sheetName}" which corresponds to ${new Date(detectedYear, detectedMonth).toLocaleString("en-IN", { month: "long", year: "numeric" })}. If rows don't have explicit dates, use dates within this month.`
+      : `The sheet is labeled "${sheetName}". Try to infer the month/year from the sheet name or row data.`;
+
+  const prompt = `You are a financial transaction parser for spreadsheet data imported from Google Sheets.
+Extract ALL expense/debit transactions from the tabular data below.
+
+${monthHint}
+
+The data has these columns (pipe-separated):
+${headers}
+
+Data rows (pipe-separated):
+${dataRows}
+
+Extraction rules for each row:
+- amount: The transaction amount in INR. Look for numeric columns (may have "Rs.", "INR", commas, or just numbers). Ignore rows with zero or empty amounts.
+- merchant: The merchant/payee/description. Look for text columns describing what the expense was for.
+- date: Transaction date in ISO 8601 format (YYYY-MM-DDT00:00:00Z, always UTC with Z suffix).
+  Today's date is ${today} and the current year is ${currentYear}.
+  Indian formats use dd-mm-yyyy or dd/mm/yyyy or dd-Mon-yyyy (day first).
+  If only a day number is present, use the month/year from the sheet name.
+  If no date at all, use the 1st of the detected month.
+- category: Must be one of the categories below. Infer from the merchant/description.
+- subcategory: Must be one of the listed subcategories for the chosen category, or null.
+- is_cc_payment: true ONLY if explicitly paying off a credit card bill. Regular purchases are false.
+- confidence_score (0.0 to 1.0): Lower if amount/merchant/category is unclear or guessed.
+
+Skip rows that are:
+- Headers, totals, subtotals, summaries, or empty rows
+- Income/credit transactions (money coming in)
+- Rows with no meaningful transaction data
+
+Available categories and subcategories:
+${categoryPromptText}`;
+
+  const { object: result } = await generateObject({
+    model: google("gemini-2.5-flash"),
+    schema: batchTransactionSchema,
+    prompt,
+  });
+
+  return result.transactions.map((t) => ({
+    amount: t.amount,
+    merchant: t.merchant,
+    date: t.date,
+    category: t.category,
+    subcategory: t.subcategory,
+    is_cc_payment: t.is_cc_payment,
+    confidence_score: t.confidence_score,
+  }));
+}
+
+export async function checkDuplicates(
+  transactions: { amount: number; merchant: string; date: string }[]
+) {
+  const results: boolean[] = [];
+
+  for (const t of transactions) {
+    const txDate = new Date(t.date);
+    const startOfDay = new Date(txDate);
+    startOfDay.setUTCHours(0, 0, 0, 0);
+    const endOfDay = new Date(txDate);
+    endOfDay.setUTCHours(23, 59, 59, 999);
+
+    const existing = await prisma.transaction.findFirst({
+      where: {
+        amount: t.amount,
+        merchant: { equals: t.merchant, mode: "insensitive" },
+        date: { gte: startOfDay, lte: endOfDay },
+      },
+    });
+    results.push(!!existing);
+  }
+
+  return results;
+}
+
+export async function createTransactionsBatch(
+  transactions: {
+    amount: number;
+    merchant: string;
+    date: string;
+    category: string;
+    subcategory?: string | null;
+    is_cc_payment: boolean;
+  }[]
+) {
+  for (const data of transactions) {
+    const { categoryId, subcategoryId } = await resolveCategoryIds(
+      data.category,
+      data.subcategory ?? null
+    );
+
+    await prisma.transaction.create({
+      data: {
+        amount: data.amount,
+        merchant: data.merchant,
+        date: new Date(data.date),
+        category: data.category,
+        categoryId,
+        subcategoryId,
+        is_cc_payment: data.is_cc_payment,
+        confidence_score: 1.0,
+        needs_review: false,
+        source: "import",
+      },
+    });
+  }
+  await revalidateAppPaths();
+}

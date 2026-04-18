@@ -1,6 +1,6 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getTransactions, getCategoriesWithSubs, getSkippedEmails } from "./actions";
+import { getTransactions, getCategoriesWithSubs, getSkippedEmails, getBudgetForMonth } from "./actions";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -12,6 +12,8 @@ import { SkippedEmails } from "@/components/skipped-emails";
 import { SeedButton } from "@/components/seed-button";
 import { MonthSwitcher } from "@/components/month-switcher";
 import { AddExpenseDialog } from "@/components/add-expense-dialog";
+import { SetBudgetDialog } from "@/components/set-budget-dialog";
+import { BudgetCard } from "@/components/budget-card";
 import { NavBar } from "@/components/nav-bar";
 
 function formatINR(value: number) {
@@ -37,10 +39,11 @@ export default async function Dashboard({
   const year =
     params.year !== undefined ? parseInt(params.year, 10) : now.getFullYear();
 
-  const [transactions, categories, skippedEmails] = await Promise.all([
+  const [transactions, categories, skippedEmails, budget] = await Promise.all([
     getTransactions(month, year),
     getCategoriesWithSubs(),
     getSkippedEmails(),
+    getBudgetForMonth(month, year),
   ] as const);
 
   const totalSpend = transactions
@@ -74,6 +77,20 @@ export default async function Dashboard({
             <NavBar />
           </div>
           <div className="flex items-center gap-3">
+            <SetBudgetDialog
+              month={month}
+              year={year}
+              currentBudget={
+                budget
+                  ? {
+                      id: budget.id,
+                      amount: budget.amount,
+                      start_month: budget.start_month,
+                      start_year: budget.start_year,
+                    }
+                  : null
+              }
+            />
             <AddExpenseDialog />
             <form
               action={async () => {
@@ -115,6 +132,10 @@ export default async function Dashboard({
             </CardContent>
           </Card>
 
+          {budget && (
+            <BudgetCard budget={budget.amount} spent={totalSpend} />
+          )}
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -139,19 +160,21 @@ export default async function Dashboard({
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Pending Reviews
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-bold">{pendingReviews}</p>
-              <p className="text-xs text-muted-foreground">
-                Need your attention
-              </p>
-            </CardContent>
-          </Card>
+          {!budget && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Pending Reviews
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-2xl font-bold">{pendingReviews}</p>
+                <p className="text-xs text-muted-foreground">
+                  Need your attention
+                </p>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="grid gap-6 lg:grid-cols-2">

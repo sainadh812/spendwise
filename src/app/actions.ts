@@ -408,6 +408,46 @@ export async function getAvailableYears(): Promise<number[]> {
   return Array.from(years).sort((a, b) => b - a);
 }
 
+export async function getBudgetForMonth(month: number, year: number) {
+  return prisma.budget.findFirst({
+    where: {
+      OR: [
+        { start_year: { lt: year } },
+        { start_year: year, start_month: { lte: month } },
+      ],
+    },
+    orderBy: [{ start_year: "desc" }, { start_month: "desc" }],
+  });
+}
+
+export async function setBudget(
+  startMonth: number,
+  startYear: number,
+  amount: number
+) {
+  if (amount <= 0) throw new Error("Budget amount must be positive");
+
+  await prisma.budget.upsert({
+    where: {
+      start_month_start_year: { start_month: startMonth, start_year: startYear },
+    },
+    update: { amount },
+    create: { start_month: startMonth, start_year: startYear, amount },
+  });
+  await revalidateAppPaths();
+}
+
+export async function deleteBudget(id: string) {
+  await prisma.budget.delete({ where: { id } });
+  await revalidateAppPaths();
+}
+
+export async function getAllBudgets() {
+  return prisma.budget.findMany({
+    orderBy: [{ start_year: "desc" }, { start_month: "desc" }],
+  });
+}
+
 export async function parseExpenseText(text: string) {
   const { google } = await import("@ai-sdk/google");
   const { generateObject } = await import("ai");

@@ -44,6 +44,18 @@ model Transaction {
   @@index([subcategoryId])
 }
 
+model Budget {
+  id          String   @id @default(uuid())
+  amount      Float
+  start_month Int
+  start_year  Int
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  @@unique([start_month, start_year])
+  @@index([start_year, start_month])
+}
+
 model SkippedEmail {
   id               String   @id @default(uuid())
   email_message_id String   @unique

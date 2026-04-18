@@ -4,6 +4,7 @@ import {
   getTransactions,
   getTransactionsForYear,
   getAvailableYears,
+  getBudgetForMonth,
 } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -21,6 +22,7 @@ import {
   TopMerchantsChart,
   WeekdayHeatmap,
   YearOverYearChart,
+  BudgetVsActualChart,
 } from "@/components/analytics-charts";
 
 function computeStats(
@@ -87,11 +89,12 @@ export default async function AnalyticsPage({
       prevYear -= 1;
     }
 
-    const [currentTxns, prevTxns, yearTxns, prevYearTxns] = await Promise.all([
+    const [currentTxns, prevTxns, yearTxns, prevYearTxns, budget] = await Promise.all([
       getTransactions(month, year),
       getTransactions(prevMonth, prevYear),
       getTransactionsForYear(year),
       getTransactionsForYear(year - 1),
+      getBudgetForMonth(month, year),
     ]);
 
     const current = serialize(currentTxns);
@@ -164,6 +167,15 @@ export default async function AnalyticsPage({
           <Separator />
 
           <MonthlyTrendChart transactions={yearSerialized} year={year} />
+
+          {budget && (
+            <BudgetVsActualChart
+              budget={budget.amount}
+              spent={computeStats(currentTxns).totalSpend}
+              month={month}
+              year={year}
+            />
+          )}
 
           <div className="grid gap-6 lg:grid-cols-2">
             {categoryMode === "combined" ? (

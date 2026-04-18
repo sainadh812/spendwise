@@ -837,7 +837,7 @@ export function YearOverYearChart({
                 fill="hsl(210, 40%, 70%)"
                 radius={[4, 4, 0, 0]}
               />
-              <Bar
+               <Bar
                 dataKey={String(currentYear)}
                 fill="hsl(221, 83%, 53%)"
                 radius={[4, 4, 0, 0]}
@@ -845,6 +845,94 @@ export function YearOverYearChart({
             </BarChart>
           </ResponsiveContainer>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+interface BudgetVsActualChartProps {
+  budget: number;
+  spent: number;
+  month: number;
+  year: number;
+}
+
+export function BudgetVsActualChart({
+  budget,
+  spent,
+  month,
+  year,
+}: BudgetVsActualChartProps) {
+  const remaining = Math.max(budget - spent, 0);
+  const over = Math.max(spent - budget, 0);
+  const percentage = Math.round((spent / budget) * 100);
+
+  const monthName = new Date(year, month).toLocaleString("en-IN", {
+    month: "long",
+    year: "numeric",
+  });
+
+  const data = over > 0
+    ? [
+        { name: "Budget", value: budget, fill: "hsl(221, 83%, 53%)" },
+        { name: "Over Budget", value: over, fill: "hsl(0, 84%, 60%)" },
+      ]
+    : [
+        { name: "Spent", value: spent, fill: "hsl(221, 83%, 53%)" },
+        { name: "Remaining", value: remaining, fill: "hsl(142, 71%, 45%)" },
+      ];
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Budget vs Actual — {monthName}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <div className="flex items-center gap-8">
+          <div className="h-[200px] w-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={data}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={60}
+                  outerRadius={80}
+                  paddingAngle={2}
+                  dataKey="value"
+                >
+                  {data.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value) => formatINR(Number(value))} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-sm text-muted-foreground">Budget</p>
+              <p className="text-xl font-bold">{formatINR(budget)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">Spent</p>
+              <p className="text-xl font-bold">{formatINR(spent)}</p>
+            </div>
+            <div>
+              <p className="text-sm text-muted-foreground">
+                {over > 0 ? "Over Budget" : "Remaining"}
+              </p>
+              <p
+                className={`text-xl font-bold ${over > 0 ? "text-red-500" : "text-emerald-600"}`}
+              >
+                {over > 0 ? formatINR(over) : formatINR(remaining)}
+              </p>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              {percentage}% of budget used
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   );

@@ -101,8 +101,10 @@ export function SetBudgetDialog({
     >
       <DialogTrigger asChild>
         <Button variant="outline" size="sm">
-          <Target className="mr-2 h-4 w-4" />
-          {currentBudget ? "Edit Budget" : "Set Budget"}
+          <Target className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">
+            {currentBudget ? "Edit Budget" : "Set Budget"}
+          </span>
         </Button>
       </DialogTrigger>
       <DialogContent className="sm:max-w-[420px]">

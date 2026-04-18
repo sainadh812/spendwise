@@ -71,12 +71,12 @@ export default async function Dashboard({
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-6">
-            <h1 className="text-xl font-bold">Expense Tracker</h1>
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex items-center gap-2 sm:gap-6">
             <NavBar />
+            <h1 className="text-lg font-bold sm:text-xl">Expense Tracker</h1>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 sm:gap-3">
             <SetBudgetDialog
               month={month}
               year={year}
@@ -99,7 +99,8 @@ export default async function Dashboard({
               }}
             >
               <Button variant="outline" size="sm" type="submit">
-                Sign Out
+                <span className="hidden sm:inline">Sign Out</span>
+                <span className="sm:hidden">Exit</span>
               </Button>
             </form>
           </div>
@@ -107,7 +108,7 @@ export default async function Dashboard({
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <MonthSwitcher month={month} year={year} />
             <p className="text-sm text-muted-foreground">
@@ -185,13 +186,20 @@ export default async function Dashboard({
         <Separator />
 
         <Tabs defaultValue="reviews">
-          <TabsList>
-            <TabsTrigger value="reviews">Pending Reviews</TabsTrigger>
-            <TabsTrigger value="all">All Transactions</TabsTrigger>
+          <TabsList className="w-full">
+            <TabsTrigger value="reviews">
+              <span className="sm:hidden">Reviews</span>
+              <span className="hidden sm:inline">Pending Reviews</span>
+            </TabsTrigger>
+            <TabsTrigger value="all">
+              <span className="sm:hidden">All</span>
+              <span className="hidden sm:inline">All Transactions</span>
+            </TabsTrigger>
             <TabsTrigger value="skipped">
-              Skipped Emails
+              <span className="sm:hidden">Skipped</span>
+              <span className="hidden sm:inline">Skipped Emails</span>
               {serializedSkipped.length > 0 && (
-                <span className="ml-1.5 rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs">
                   {serializedSkipped.length}
                 </span>
               )}

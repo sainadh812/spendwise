@@ -30,7 +30,7 @@ export function SeedButton() {
         onClick={handleSeed}
         disabled={isPending}
       >
-        {isPending ? "Seeding..." : "Seed Sample Data"}
+        {isPending ? "Seeding..." : "Seed Data"}
       </Button>
       {message && (
         <span className="text-sm text-muted-foreground">{message}</span>

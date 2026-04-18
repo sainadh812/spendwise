@@ -41,15 +41,24 @@ export function MonthSwitcher({
     router.push(`/?${params.toString()}`);
   }
 
+  const shortLabel = new Date(year, month).toLocaleDateString("en-IN", {
+    month: "short",
+    year: "numeric",
+  });
+
   return (
-    <div className="flex items-center gap-2">
-      <Button variant="outline" size="icon" onClick={() => navigate(-1)}>
+    <div className="flex items-center gap-1 sm:gap-2">
+      <Button variant="outline" size="icon" className="h-8 w-8 sm:h-9 sm:w-9" onClick={() => navigate(-1)}>
         <ChevronLeft className="h-4 w-4" />
       </Button>
-      <h2 className="min-w-[180px] text-center text-2xl font-bold">{label}</h2>
+      <h2 className="text-center text-lg font-bold sm:min-w-[180px] sm:text-2xl">
+        <span className="sm:hidden">{shortLabel}</span>
+        <span className="hidden sm:inline">{label}</span>
+      </h2>
       <Button
         variant="outline"
         size="icon"
+        className="h-8 w-8 sm:h-9 sm:w-9"
         onClick={() => navigate(1)}
         disabled={isCurrentMonth}
       >

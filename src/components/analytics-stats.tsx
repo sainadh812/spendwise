@@ -62,7 +62,7 @@ function ChangeIndicator({
     <span
       className={cn(
         "flex items-center gap-1 text-xs font-medium",
-        isGood ? "text-destructive" : "text-emerald-600"
+        isGood ? "text-emerald-600" : "text-destructive"
       )}
     >
       {isUp ? (

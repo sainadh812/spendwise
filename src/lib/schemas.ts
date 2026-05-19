@@ -44,3 +44,41 @@ export const batchTransactionSchema = z.object({
 });
 
 export type BatchTransactionInput = z.infer<typeof batchTransactionSchema>;
+
+export const insightOutputSchema = z.object({
+  summary: z
+    .string()
+    .describe(
+      "2-3 sentence neutral summary of the period's spending. Descriptive, not prescriptive. No financial advice. Reference specific INR figures and the comparison period from the provided stats."
+    ),
+  trends: z
+    .array(z.string())
+    .max(5)
+    .describe(
+      "Notable comparison patterns vs the previous period. Reference ONLY numbers present in the provided stats. Do not invent figures. Each entry should be a single sentence."
+    ),
+  anomalies: z
+    .array(
+      z.object({
+        merchant: z.string().describe("Merchant name from the stats anomalies list"),
+        amount: z.number().describe("Amount in INR from the stats anomalies list"),
+        reason: z
+          .string()
+          .describe(
+            "Why this is unusual. Reference the category mean / z-score from the provided stats. One sentence."
+          ),
+      })
+    )
+    .max(5)
+    .describe(
+      "Anomalous transactions. Only include items present in stats.anomalies — do not invent new ones."
+    ),
+  suggestions: z
+    .array(z.string())
+    .max(3)
+    .describe(
+      "Specific, data-tied observations. Examples: 'Swiggy appears 14 times — consider a cap', 'Two Netflix charges on consecutive days look like duplicates'. Avoid generic advice like 'spend less on dining'. No investment or financial advice."
+    ),
+});
+
+export type InsightOutput = z.infer<typeof insightOutputSchema>;

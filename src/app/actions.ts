@@ -3,6 +3,14 @@
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { DEFAULT_CATEGORIES } from "@/lib/categories";
+import type { Period } from "@/lib/insights-period";
+import type { InsightOutput } from "@/lib/schemas";
+import type { InsightStats } from "@/lib/insights-stats-pure";
+import {
+  INSIGHTS_MODEL,
+  MIN_TRANSACTIONS_FOR_INSIGHTS,
+  type InsightResult,
+} from "@/lib/insights-config";
 
 export interface CategoryWithSubs {
   id: string;
@@ -646,4 +654,155 @@ export async function createTransactionsBatch(
     });
   }
   await revalidateAppPaths();
+}
+
+export async function getCachedInsight(period: Period): Promise<InsightResult | null> {
+  const { periodKey } = await import("@/lib/insights-period");
+  const key = periodKey(period);
+
+  const cached = await prisma.insight.findUnique({
+    where: { period_type_period_key: { period_type: period.type, period_key: key } },
+  });
+
+  if (!cached) return null;
+
+  return {
+    status: "ok",
+    cached: true,
+    stats: cached.stats as unknown as InsightStats,
+    insight: {
+      summary: cached.summary,
+      trends: cached.trends as unknown as string[],
+      anomalies: cached.anomalies as unknown as InsightOutput["anomalies"],
+      suggestions: cached.suggestions as unknown as string[],
+      model: cached.model,
+      generatedAt: cached.updated_at.toISOString(),
+    },
+  };
+}
+
+export async function getInsights(
+  period: Period,
+  force = false
+): Promise<InsightResult> {
+  const { computeInsightStats } = await import("@/lib/insights-stats");
+  const { periodKey, periodLabel, previousPeriodLabel } = await import(
+    "@/lib/insights-period"
+  );
+
+  const key = periodKey(period);
+  const stats = await computeInsightStats(period);
+
+  const cached = await prisma.insight.findUnique({
+    where: { period_type_period_key: { period_type: period.type, period_key: key } },
+  });
+
+  const latestTxAt = stats.latestTxDate ? new Date(stats.latestTxDate) : null;
+
+  if (
+    !force &&
+    cached &&
+    cached.tx_count_at_generation === stats.txCount &&
+    latestTxAt &&
+    cached.tx_latest_at_generation.getTime() === latestTxAt.getTime()
+  ) {
+    return {
+      status: "ok",
+      cached: true,
+      stats,
+      insight: {
+        summary: cached.summary,
+        trends: cached.trends as unknown as string[],
+        anomalies: cached.anomalies as unknown as InsightOutput["anomalies"],
+        suggestions: cached.suggestions as unknown as string[],
+        model: cached.model,
+        generatedAt: cached.updated_at.toISOString(),
+      },
+    };
+  }
+
+  if (stats.txCount < MIN_TRANSACTIONS_FOR_INSIGHTS) {
+    return {
+      status: "not_enough_data",
+      cached: false,
+      stats,
+      insight: null,
+      reason: "not_enough_data",
+    };
+  }
+
+  const { google } = await import("@ai-sdk/google");
+  const { generateObject } = await import("ai");
+  const { insightOutputSchema } = await import("@/lib/schemas");
+
+  const label = periodLabel(period);
+  const prevLabel = previousPeriodLabel(period);
+
+  const prompt = `You are a financial analyst describing one period of personal spending for a single user in India (INR).
+You will be given PRE-COMPUTED aggregates as JSON. Do not invent or recompute numbers — only reference figures that appear in the JSON below.
+
+Rules:
+- Be descriptive, not prescriptive. Do NOT give investment or financial advice.
+- Reference specific merchants, categories, and INR figures from the data.
+- For anomalies, only describe items already in stats.anomalies. Explain the z-score in plain language (e.g. "3.1σ above the category mean").
+- For suggestions, prefer concrete observations tied to data (e.g. "Swiggy appears 14 times — consider a monthly cap") over generic advice.
+- If a category dropped to zero, do not speculate why.
+- All amounts are INR. Format like ₹1,234.
+- The comparison period is "${prevLabel}". Refer to it by name when relevant.
+
+Period: ${label}
+Stats:
+${JSON.stringify(stats, null, 2)}`;
+
+  const { object } = await generateObject({
+    model: google(INSIGHTS_MODEL),
+    schema: insightOutputSchema,
+    prompt,
+  });
+
+  const saved = await prisma.insight.upsert({
+    where: { period_type_period_key: { period_type: period.type, period_key: key } },
+    update: {
+      month: period.type === "month" ? period.month : null,
+      year: period.year,
+      stats: stats as unknown as object,
+      summary: object.summary,
+      trends: object.trends,
+      anomalies: object.anomalies,
+      suggestions: object.suggestions,
+      tx_count_at_generation: stats.txCount,
+      tx_latest_at_generation: latestTxAt ?? new Date(),
+      model: INSIGHTS_MODEL,
+    },
+    create: {
+      period_type: period.type,
+      period_key: key,
+      month: period.type === "month" ? period.month : null,
+      year: period.year,
+      stats: stats as unknown as object,
+      summary: object.summary,
+      trends: object.trends,
+      anomalies: object.anomalies,
+      suggestions: object.suggestions,
+      tx_count_at_generation: stats.txCount,
+      tx_latest_at_generation: latestTxAt ?? new Date(),
+      model: INSIGHTS_MODEL,
+    },
+  });
+
+  revalidatePath("/analytics");
+
+  return {
+    status: "ok",
+    cached: false,
+    stats,
+    insight: {
+      summary: saved.summary,
+      trends: saved.trends as unknown as string[],
+      anomalies: saved.anomalies as unknown as InsightOutput["anomalies"],
+      suggestions: saved.suggestions as unknown as string[],
+      model: saved.model,
+      generatedAt: saved.updated_at.toISOString(),
+    },
+  };
 }

@@ -5,7 +5,10 @@ import {
   getTransactionsForYear,
   getAvailableYears,
   getBudgetForMonth,
+  getCachedInsight,
 } from "@/app/actions";
+import { InsightsCard } from "@/components/insights-card";
+import type { Period } from "@/lib/insights-period";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { NavBar } from "@/components/nav-bar";
@@ -89,12 +92,14 @@ export default async function AnalyticsPage({
       prevYear -= 1;
     }
 
-    const [currentTxns, prevTxns, yearTxns, prevYearTxns, budget] = await Promise.all([
+    const monthlyPeriod: Period = { type: "month", year, month };
+    const [currentTxns, prevTxns, yearTxns, prevYearTxns, budget, cachedInsight] = await Promise.all([
       getTransactions(month, year),
       getTransactions(prevMonth, prevYear),
       getTransactionsForYear(year),
       getTransactionsForYear(year - 1),
       getBudgetForMonth(month, year),
+      getCachedInsight(monthlyPeriod),
     ]);
 
     const current = serialize(currentTxns);
@@ -164,6 +169,8 @@ export default async function AnalyticsPage({
             periodLabel={periodLabel}
             prevPeriodLabel={prevLabel}
           />
+
+          <InsightsCard period={monthlyPeriod} initial={cachedInsight} />
 
           <Separator />
 

@@ -66,3 +66,24 @@ model SkippedEmail {
   dismissed        Boolean  @default(false)
   created_at       DateTime @default(now())
 }
+
+model Insight {
+  id                     String   @id @default(uuid())
+  period_type            String
+  period_key             String
+  month                  Int?
+  year                   Int
+  stats                  Json
+  summary                String
+  trends                 Json
+  anomalies              Json
+  suggestions            Json
+  tx_count_at_generation Int
+  tx_latest_at_generation DateTime
+  model                  String   @default("gemini-2.5-pro")
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@unique([period_type, period_key])
+  @@index([year, month])
+}

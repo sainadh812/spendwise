@@ -298,6 +298,32 @@ describe("getCachedInsight", () => {
   });
 });
 
+describe("getInsights — output clamping", () => {
+  it("trims model output to the configured limits before storing", async () => {
+    transactionFindMany.mockResolvedValueOnce(makeTransactions(10));
+    transactionFindMany.mockResolvedValueOnce([]);
+    insightFindUnique.mockResolvedValueOnce(null);
+
+    generateObjectMock.mockResolvedValueOnce({
+      object: {
+        summary: "test",
+        trends: ["t1", "t2", "t3", "t4", "t5", "t6", "t7"],
+        anomalies: [],
+        suggestions: ["s1", "s2", "s3", "s4", "s5"],
+      },
+    });
+
+    const result = await getInsights(monthPeriod);
+
+    expect(result.insight?.trends).toHaveLength(5);
+    expect(result.insight?.suggestions).toHaveLength(3);
+
+    const upsertCall = insightUpsert.mock.calls[0][0];
+    expect(upsertCall.create.trends).toHaveLength(5);
+    expect(upsertCall.create.suggestions).toHaveLength(3);
+  });
+});
+
 describe("getInsights — prompt construction", () => {
   it("includes the period label and previous-period label in the prompt", async () => {
     transactionFindMany.mockResolvedValueOnce(makeTransactions(10));
@@ -322,6 +348,19 @@ describe("getInsights — prompt construction", () => {
     expect(call.prompt).toMatch(/"totalSpend"/);
     expect(call.prompt).toMatch(/"byCategory"/);
     expect(call.prompt).toMatch(/"topMerchants"/);
+  });
+
+  it("includes explicit per-array length limits in the prompt", async () => {
+    transactionFindMany.mockResolvedValueOnce(makeTransactions(10));
+    transactionFindMany.mockResolvedValueOnce([]);
+    insightFindUnique.mockResolvedValueOnce(null);
+
+    await getInsights(monthPeriod);
+
+    const call = generateObjectMock.mock.calls[0][0];
+    expect(call.prompt).toMatch(/trends: 5 items max/);
+    expect(call.prompt).toMatch(/anomalies: 5 items max/);
+    expect(call.prompt).toMatch(/suggestions: 3 items max/);
   });
 
   it("uses gemini-2.5-pro model", async () => {

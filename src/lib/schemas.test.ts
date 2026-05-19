@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { insightOutputSchema, transactionSchema } from "@/lib/schemas";
+import {
+  insightOutputSchema,
+  clampInsightOutput,
+  INSIGHT_LIMITS,
+  transactionSchema,
+} from "@/lib/schemas";
 
 describe("insightOutputSchema", () => {
   const validInput = {
@@ -33,32 +38,16 @@ describe("insightOutputSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects more than 5 trends", () => {
+  it("accepts arrays longer than the soft limits (the schema does not enforce length)", () => {
+    // Gemini sometimes ignores .max() in structured output; length is clamped
+    // post-parse via clampInsightOutput, not rejected. The schema's job is
+    // structural correctness only.
     const result = insightOutputSchema.safeParse({
       ...validInput,
-      trends: ["a", "b", "c", "d", "e", "f"],
+      trends: ["a", "b", "c", "d", "e", "f", "g"],
+      suggestions: ["a", "b", "c", "d", "e"],
     });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects more than 5 anomalies", () => {
-    const result = insightOutputSchema.safeParse({
-      ...validInput,
-      anomalies: Array.from({ length: 6 }, (_, i) => ({
-        merchant: `M${i}`,
-        amount: 100,
-        reason: "x",
-      })),
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it("rejects more than 3 suggestions", () => {
-    const result = insightOutputSchema.safeParse({
-      ...validInput,
-      suggestions: ["a", "b", "c", "d"],
-    });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("rejects anomalies missing required fields", () => {
@@ -83,6 +72,57 @@ describe("insightOutputSchema", () => {
     expect(Array.isArray(parsed.trends)).toBe(true);
     expect(Array.isArray(parsed.anomalies)).toBe(true);
     expect(parsed.anomalies[0].merchant).toBe("Apollo");
+  });
+});
+
+describe("clampInsightOutput", () => {
+  const longOutput = {
+    summary: "test",
+    trends: ["t1", "t2", "t3", "t4", "t5", "t6", "t7"],
+    anomalies: Array.from({ length: 7 }, (_, i) => ({
+      merchant: `M${i}`,
+      amount: 100,
+      reason: "x",
+    })),
+    suggestions: ["s1", "s2", "s3", "s4", "s5"],
+  };
+
+  it("clamps trends to the configured limit", () => {
+    const clamped = clampInsightOutput(longOutput);
+    expect(clamped.trends).toHaveLength(INSIGHT_LIMITS.trends);
+    expect(clamped.trends).toEqual(longOutput.trends.slice(0, INSIGHT_LIMITS.trends));
+  });
+
+  it("clamps anomalies to the configured limit", () => {
+    const clamped = clampInsightOutput(longOutput);
+    expect(clamped.anomalies).toHaveLength(INSIGHT_LIMITS.anomalies);
+  });
+
+  it("clamps suggestions to the configured limit", () => {
+    const clamped = clampInsightOutput(longOutput);
+    expect(clamped.suggestions).toHaveLength(INSIGHT_LIMITS.suggestions);
+  });
+
+  it("preserves the summary unchanged", () => {
+    const clamped = clampInsightOutput(longOutput);
+    expect(clamped.summary).toBe(longOutput.summary);
+  });
+
+  it("is a no-op when input is already within limits", () => {
+    const small = {
+      summary: "test",
+      trends: ["t1", "t2"],
+      anomalies: [],
+      suggestions: ["s1"],
+    };
+    const clamped = clampInsightOutput(small);
+    expect(clamped).toEqual(small);
+  });
+
+  it("keeps the highest-priority items (model is instructed to sort by priority)", () => {
+    const clamped = clampInsightOutput(longOutput);
+    expect(clamped.trends[0]).toBe("t1");
+    expect(clamped.suggestions[0]).toBe("s1");
   });
 });
 

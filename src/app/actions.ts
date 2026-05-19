@@ -733,7 +733,8 @@ export async function getInsights(
 
   const { google } = await import("@ai-sdk/google");
   const { generateObject } = await import("ai");
-  const { insightOutputSchema } = await import("@/lib/schemas");
+  const { insightOutputSchema, clampInsightOutput, INSIGHT_LIMITS } =
+    await import("@/lib/schemas");
 
   const label = periodLabel(period);
   const prevLabel = previousPeriodLabel(period);
@@ -741,10 +742,15 @@ export async function getInsights(
   const prompt = `You are a financial analyst describing one period of personal spending for a single user in India (INR).
 You will be given PRE-COMPUTED aggregates as JSON. Do not invent or recompute numbers — only reference figures that appear in the JSON below.
 
+Output length limits (STRICT — return AT MOST this many items, fewer is fine):
+- trends: ${INSIGHT_LIMITS.trends} items max
+- anomalies: ${INSIGHT_LIMITS.anomalies} items max
+- suggestions: ${INSIGHT_LIMITS.suggestions} items max
+
 Rules:
 - Be descriptive, not prescriptive. Do NOT give investment or financial advice.
 - Reference specific merchants, categories, and INR figures from the data.
-- For anomalies, only describe items already in stats.anomalies. Explain the z-score in plain language (e.g. "3.1σ above the category mean").
+- For anomalies, ONLY include merchants that appear in stats.anomalies. Do not invent new anomalies. Explain the z-score in plain language (e.g. "3.1σ above the category mean").
 - For suggestions, prefer concrete observations tied to data (e.g. "Swiggy appears 14 times — consider a monthly cap") over generic advice.
 - If a category dropped to zero, do not speculate why.
 - All amounts are INR. Format like ₹1,234.
@@ -754,11 +760,13 @@ Period: ${label}
 Stats:
 ${JSON.stringify(stats, null, 2)}`;
 
-  const { object } = await generateObject({
+  const { object: raw } = await generateObject({
     model: google(INSIGHTS_MODEL),
     schema: insightOutputSchema,
     prompt,
   });
+
+  const object = clampInsightOutput(raw);
 
   const saved = await prisma.insight.upsert({
     where: { period_type_period_key: { period_type: period.type, period_key: key } },

@@ -45,6 +45,12 @@ export const batchTransactionSchema = z.object({
 
 export type BatchTransactionInput = z.infer<typeof batchTransactionSchema>;
 
+export const INSIGHT_LIMITS = {
+  trends: 5,
+  anomalies: 5,
+  suggestions: 3,
+} as const;
+
 export const insightOutputSchema = z.object({
   summary: z
     .string()
@@ -53,9 +59,8 @@ export const insightOutputSchema = z.object({
     ),
   trends: z
     .array(z.string())
-    .max(5)
     .describe(
-      "Notable comparison patterns vs the previous period. Reference ONLY numbers present in the provided stats. Do not invent figures. Each entry should be a single sentence."
+      `Notable comparison patterns vs the previous period. Return at most ${INSIGHT_LIMITS.trends} entries, most important first. Reference ONLY numbers present in the provided stats. Do not invent figures. Each entry should be a single sentence.`
     ),
   anomalies: z
     .array(
@@ -69,16 +74,23 @@ export const insightOutputSchema = z.object({
           ),
       })
     )
-    .max(5)
     .describe(
-      "Anomalous transactions. Only include items present in stats.anomalies — do not invent new ones."
+      `Anomalous transactions. Return at most ${INSIGHT_LIMITS.anomalies} entries, highest z-score first. Only include items present in stats.anomalies — do not invent new ones.`
     ),
   suggestions: z
     .array(z.string())
-    .max(3)
     .describe(
-      "Specific, data-tied observations. Examples: 'Swiggy appears 14 times — consider a cap', 'Two Netflix charges on consecutive days look like duplicates'. Avoid generic advice like 'spend less on dining'. No investment or financial advice."
+      `Specific, data-tied observations. Return at most ${INSIGHT_LIMITS.suggestions} entries, most actionable first. Examples: 'Swiggy appears 14 times — consider a cap', 'Two Netflix charges on consecutive days look like duplicates'. Avoid generic advice like 'spend less on dining'. No investment or financial advice.`
     ),
 });
 
 export type InsightOutput = z.infer<typeof insightOutputSchema>;
+
+export function clampInsightOutput(output: InsightOutput): InsightOutput {
+  return {
+    summary: output.summary,
+    trends: output.trends.slice(0, INSIGHT_LIMITS.trends),
+    anomalies: output.anomalies.slice(0, INSIGHT_LIMITS.anomalies),
+    suggestions: output.suggestions.slice(0, INSIGHT_LIMITS.suggestions),
+  };
+}

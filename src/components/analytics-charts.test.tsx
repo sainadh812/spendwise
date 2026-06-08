@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import {
   MonthlyTrendChart,
   AnalyticsPieChart,
@@ -59,6 +60,80 @@ describe("MonthlyTrendChart", () => {
   it("does not show empty state when valid transactions exist", () => {
     render(<MonthlyTrendChart transactions={sampleTransactions} year={2026} />);
     expect(screen.queryByText("No spending data for this year")).not.toBeInTheDocument();
+  });
+
+  it("renders a toggle for each parent category present in the data", () => {
+    render(<MonthlyTrendChart transactions={sampleTransactions} year={2026} />);
+
+    expect(
+      screen.getByRole("button", { name: "Shopping", pressed: true })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Food", pressed: true })
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Transport", pressed: true })
+    ).toBeInTheDocument();
+  });
+
+  it("hides the category filter when only one category exists", () => {
+    const singleCategory: AnalyticsTransaction[] = [
+      makeTxn({ id: "1", category: "Shopping" }),
+      makeTxn({ id: "2", category: "Shopping" }),
+    ];
+    render(<MonthlyTrendChart transactions={singleCategory} year={2026} />);
+
+    expect(screen.queryByText("Categories:")).not.toBeInTheDocument();
+  });
+
+  it("excludes a category when its toggle is clicked", async () => {
+    const user = userEvent.setup();
+    render(<MonthlyTrendChart transactions={sampleTransactions} year={2026} />);
+
+    await user.click(screen.getByRole("button", { name: "Shopping" }));
+
+    expect(
+      screen.getByRole("button", { name: "Shopping", pressed: false })
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /reset/i })).toBeInTheDocument();
+  });
+
+  it("re-includes a category on a second click", async () => {
+    const user = userEvent.setup();
+    render(<MonthlyTrendChart transactions={sampleTransactions} year={2026} />);
+
+    const food = screen.getByRole("button", { name: "Food" });
+    await user.click(food);
+    await user.click(food);
+
+    expect(
+      screen.getByRole("button", { name: "Food", pressed: true })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reset/i })).not.toBeInTheDocument();
+  });
+
+  it("shows the all-excluded empty state when every category is excluded", async () => {
+    const user = userEvent.setup();
+    render(<MonthlyTrendChart transactions={sampleTransactions} year={2026} />);
+
+    await user.click(screen.getByRole("button", { name: "Shopping" }));
+    await user.click(screen.getByRole("button", { name: "Food" }));
+    await user.click(screen.getByRole("button", { name: "Transport" }));
+
+    expect(screen.getByText("All categories excluded")).toBeInTheDocument();
+  });
+
+  it("resets all exclusions when Reset is clicked", async () => {
+    const user = userEvent.setup();
+    render(<MonthlyTrendChart transactions={sampleTransactions} year={2026} />);
+
+    await user.click(screen.getByRole("button", { name: "Shopping" }));
+    await user.click(screen.getByRole("button", { name: /reset/i }));
+
+    expect(
+      screen.getByRole("button", { name: "Shopping", pressed: true })
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /reset/i })).not.toBeInTheDocument();
   });
 });
 

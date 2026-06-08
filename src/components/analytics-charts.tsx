@@ -96,10 +96,18 @@ export function MonthlyTrendChart({
   transactions: AnalyticsTransaction[];
   year: number;
 }) {
-  const spending = transactions.filter((t) => !t.is_cc_payment);
-  const monthlyMap = new Map<number, number>();
+  const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
-  for (const t of spending) {
+  const spending = transactions.filter((t) => !t.is_cc_payment);
+
+  const availableCategories = Array.from(
+    new Set(spending.map((t) => t.category))
+  ).sort((a, b) => a.localeCompare(b));
+
+  const filteredSpending = spending.filter((t) => !excluded.has(t.category));
+
+  const monthlyMap = new Map<number, number>();
+  for (const t of filteredSpending) {
     const m = new Date(t.date).getMonth();
     monthlyMap.set(m, (monthlyMap.get(m) || 0) + t.amount);
   }
@@ -110,15 +118,70 @@ export function MonthlyTrendChart({
   }));
 
   const hasData = data.some((d) => d.amount > 0);
+  const hasAnySpending = spending.length > 0;
+  const hasExclusions = excluded.size > 0;
+
+  function toggleCategory(category: string) {
+    setExcluded((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) {
+        next.delete(category);
+      } else {
+        next.add(category);
+      }
+      return next;
+    });
+  }
 
   return (
     <Card className="col-span-full">
       <CardHeader>
         <CardTitle>Monthly Spending Trend — {year}</CardTitle>
+        {hasAnySpending && availableCategories.length > 1 && (
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-muted-foreground mr-1">
+              Categories:
+            </span>
+            {availableCategories.map((cat) => {
+              const isExcluded = excluded.has(cat);
+              return (
+                <button
+                  key={cat}
+                  type="button"
+                  onClick={() => toggleCategory(cat)}
+                  aria-pressed={!isExcluded}
+                  className={`rounded-full border px-2 py-0.5 text-xs font-medium transition-colors ${
+                    isExcluded
+                      ? "border-dashed border-muted-foreground/40 bg-transparent text-muted-foreground line-through hover:bg-muted"
+                      : "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
+            {hasExclusions && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-2 text-xs"
+                onClick={() => setExcluded(new Set())}
+              >
+                Reset
+              </Button>
+            )}
+          </div>
+        )}
       </CardHeader>
       <CardContent>
         {!hasData ? (
-          <EmptyState message="No spending data for this year" />
+          <EmptyState
+            message={
+              hasExclusions
+                ? "All categories excluded"
+                : "No spending data for this year"
+            }
+          />
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <LineChart data={data}>

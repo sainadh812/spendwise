@@ -122,8 +122,10 @@ async function findDuplicate(amount: number, merchant: string, date: Date) {
 
 interface ProcessedEntry {
   email_id: string;
+  email_url?: string;
   from: string;
   subject: string;
+  body_snippet?: string;
   parsed: {
     amount: number;
     merchant: string;
@@ -133,7 +135,27 @@ interface ProcessedEntry {
     is_cc_payment: boolean;
     confidence_score: number;
   };
-  status: "saved" | "duplicate_skipped" | "duplicate_flagged" | "junk_skipped";
+  status:
+    | "saved"
+    | "duplicate_skipped"
+    | "duplicate_flagged"
+    | "junk_skipped"
+    | "would_save"
+    | "would_skip_junk"
+    | "would_flag_duplicate";
+  reason?: string;
+  duplicate_of?: { id: string; date: string; amount: number; merchant: string };
+}
+
+interface ProcessedError {
+  email_id: string;
+  from?: string;
+  subject?: string;
+  message: string;
+}
+
+function gmailWebUrl(messageId: string): string {
+  return `https://mail.google.com/mail/u/0/#inbox/${messageId}`;
 }
 
 export async function GET(request: NextRequest) {
@@ -141,12 +163,29 @@ export async function GET(request: NextRequest) {
   const dryRun = searchParams.get("dry_run") === "true";
   const verbose = searchParams.get("verbose") === "true";
   const limit = parseInt(searchParams.get("limit") || "50", 10);
+  const queryOverride = searchParams.get("query")?.trim() || null;
 
-  // In dev, allow calling without CRON_SECRET for local testing
+  // In dev, allow calling without CRON_SECRET for local testing.
+  // In prod, also allow authenticated session users (debug page) — they bypass CRON_SECRET.
   const isDev = process.env.NODE_ENV !== "production";
   const authHeader = request.headers.get("authorization");
-  if (!isDev && authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+  const hasSessionCookie =
+    request.cookies.get("authjs.session-token") ||
+    request.cookies.get("__Secure-authjs.session-token");
+  const isAuthorized =
+    isDev ||
+    authHeader === `Bearer ${process.env.CRON_SECRET}` ||
+    !!hasSessionCookie;
+
+  if (!isAuthorized) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  if (queryOverride && !hasSessionCookie && !isDev) {
+    return NextResponse.json(
+      { error: "Query override requires an authenticated session" },
+      { status: 403 }
+    );
   }
 
   try {
@@ -162,7 +201,8 @@ export async function GET(request: NextRequest) {
     });
 
     const gmail = googleapis.gmail({ version: "v1", auth: oauth2Client });
-    const searchQuery = process.env.GMAIL_SEARCH_QUERY || BANK_EMAIL_QUERY;
+    const searchQuery =
+      queryOverride || process.env.GMAIL_SEARCH_QUERY || BANK_EMAIL_QUERY;
 
     const messages = await gmail.users.messages.list({
       userId: "me",
@@ -175,7 +215,10 @@ export async function GET(request: NextRequest) {
         message: "No new bank alert emails found",
         processed: 0,
         dry_run: dryRun,
-        query_used: verbose ? searchQuery : undefined,
+        total_emails_found: 0,
+        query_used: searchQuery,
+        transactions: [],
+        errors: undefined,
       });
     }
 
@@ -183,7 +226,7 @@ export async function GET(request: NextRequest) {
     let skippedDuplicates = 0;
     let skippedJunk = 0;
     const entries: ProcessedEntry[] = [];
-    const errors: string[] = [];
+    const errors: ProcessedError[] = [];
 
     for (const msg of messages.data.messages) {
       try {
@@ -199,21 +242,45 @@ export async function GET(request: NextRequest) {
         ]);
         if (alreadyProcessed || alreadySkipped) {
           skippedDuplicates++;
-          if (verbose && alreadyProcessed) {
+          if (verbose) {
+            const reason = alreadyProcessed
+              ? `Already saved as transaction ${alreadyProcessed.id}`
+              : "Already in skipped_emails table";
             entries.push({
               email_id: messageId,
-              from: "",
-              subject: "",
-              parsed: {
-                amount: alreadyProcessed.amount,
-                merchant: alreadyProcessed.merchant,
-                date: alreadyProcessed.date.toISOString(),
-                category: alreadyProcessed.category,
-                subcategory: null,
-                is_cc_payment: alreadyProcessed.is_cc_payment,
-                confidence_score: alreadyProcessed.confidence_score,
-              },
+              email_url: gmailWebUrl(messageId),
+              from: alreadySkipped?.sender || "",
+              subject: alreadySkipped?.subject || "",
+              body_snippet: alreadySkipped?.body_snippet,
+              parsed: alreadyProcessed
+                ? {
+                    amount: alreadyProcessed.amount,
+                    merchant: alreadyProcessed.merchant,
+                    date: alreadyProcessed.date.toISOString(),
+                    category: alreadyProcessed.category,
+                    subcategory: null,
+                    is_cc_payment: alreadyProcessed.is_cc_payment,
+                    confidence_score: alreadyProcessed.confidence_score,
+                  }
+                : {
+                    amount: 0,
+                    merchant: "",
+                    date: "",
+                    category: "",
+                    subcategory: null,
+                    is_cc_payment: false,
+                    confidence_score: 0,
+                  },
               status: "duplicate_skipped",
+              reason,
+              duplicate_of: alreadyProcessed
+                ? {
+                    id: alreadyProcessed.id,
+                    date: alreadyProcessed.date.toISOString(),
+                    amount: alreadyProcessed.amount,
+                    merchant: alreadyProcessed.merchant,
+                  }
+                : undefined,
             });
           }
           continue;
@@ -249,6 +316,9 @@ export async function GET(request: NextRequest) {
           prompt: buildAIPrompt(categoryPromptText) + emailText,
         });
 
+        const snippet = emailBodySnippet(body);
+        const aiReason = `AI classified as non-debit (merchant: ${transaction.merchant || "N/A"})`;
+
         if (transaction.confidence_score === 0) {
           skippedJunk++;
           if (!dryRun) {
@@ -257,8 +327,8 @@ export async function GET(request: NextRequest) {
                 email_message_id: messageId,
                 subject,
                 sender: from,
-                body_snippet: emailBodySnippet(body),
-                ai_reason: `AI classified as non-debit (merchant: ${transaction.merchant || "N/A"})`,
+                body_snippet: snippet,
+                ai_reason: aiReason,
               },
             });
             await gmail.users.messages.modify({
@@ -269,10 +339,13 @@ export async function GET(request: NextRequest) {
           }
           entries.push({
             email_id: messageId,
+            email_url: gmailWebUrl(messageId),
             from,
             subject,
+            body_snippet: snippet,
             parsed: { ...transaction, date: transaction.date },
-            status: "junk_skipped",
+            status: dryRun ? "would_skip_junk" : "junk_skipped",
+            reason: aiReason,
           });
           continue;
         }
@@ -285,11 +358,11 @@ export async function GET(request: NextRequest) {
         );
 
         let needsReview = transaction.confidence_score < 0.8;
-        let status: ProcessedEntry["status"] = "saved";
+        let status: ProcessedEntry["status"] = dryRun ? "would_save" : "saved";
 
         if (duplicate) {
           needsReview = true;
-          status = "duplicate_flagged";
+          status = dryRun ? "would_flag_duplicate" : "duplicate_flagged";
         }
 
         const parentCategory = await prisma.category.findFirst({
@@ -327,19 +400,43 @@ export async function GET(request: NextRequest) {
           });
         }
 
+        const reasonParts: string[] = [];
+        if (needsReview) {
+          reasonParts.push(
+            `confidence_score=${transaction.confidence_score.toFixed(2)} below 0.8 threshold`
+          );
+        }
+        if (duplicate) {
+          reasonParts.push(
+            `Possible duplicate of transaction ${duplicate.id} (${duplicate.merchant}, ₹${duplicate.amount})`
+          );
+        }
+
         entries.push({
           email_id: messageId,
+          email_url: gmailWebUrl(messageId),
           from,
           subject,
+          body_snippet: snippet,
           parsed: { ...transaction, date: transaction.date },
           status,
+          reason: reasonParts.length > 0 ? reasonParts.join("; ") : undefined,
+          duplicate_of: duplicate
+            ? {
+                id: duplicate.id,
+                date: duplicate.date.toISOString(),
+                amount: duplicate.amount,
+                merchant: duplicate.merchant,
+              }
+            : undefined,
         });
 
         processed++;
       } catch (err) {
-        errors.push(
-          `Failed to process email ${msg.id}: ${err instanceof Error ? err.message : "Unknown error"}`
-        );
+        errors.push({
+          email_id: msg.id ?? "unknown",
+          message: err instanceof Error ? err.message : "Unknown error",
+        });
       }
     }
 
@@ -354,7 +451,7 @@ export async function GET(request: NextRequest) {
       total_emails_found: messages.data.messages.length,
       transactions: entries,
       errors: errors.length > 0 ? errors : undefined,
-      query_used: verbose ? searchQuery : undefined,
+      query_used: searchQuery,
     });
   } catch (error) {
     console.error("Email processing error:", error);

@@ -3,9 +3,9 @@ import { redirect } from "next/navigation";
 import { getCategoriesWithSubs } from "@/app/actions";
 import { Button } from "@/components/ui/button";
 import { NavBar } from "@/components/nav-bar";
-import { ImportUploader } from "@/components/import-uploader";
+import { DebugRunner } from "@/components/debug-runner";
 
-export default async function ImportPage() {
+export default async function DebugPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
@@ -35,14 +35,15 @@ export default async function ImportPage() {
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
         <div className="space-y-1">
-          <h2 className="text-2xl font-bold">Import Expenses</h2>
+          <h2 className="text-2xl font-bold">Debug Email Pipeline</h2>
           <p className="text-sm text-muted-foreground">
-            Import expenses from Google Sheets (.xlsx) or CSV files. Multi-sheet
-            files are supported — each sheet can represent a different month.
+            Re-run the Gmail &rarr; Gemini extractor and inspect every email,
+            the parsed AI output, and why it was (or wasn&apos;t) saved.
+            Defaults to dry-run so nothing is written to the database.
           </p>
         </div>
 
-        <ImportUploader categories={categories} />
+        <DebugRunner categories={categories} />
       </main>
     </div>
   );

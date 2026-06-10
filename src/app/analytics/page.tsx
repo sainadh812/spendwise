@@ -153,7 +153,7 @@ export default async function AnalyticsPage({
           <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
             <div className="flex items-center gap-2 sm:gap-6">
               <NavBar />
-              <h1 className="text-lg font-bold sm:text-xl">Expense Tracker</h1>
+              <h1 className="text-lg font-bold sm:text-xl md:hidden">Expense Tracker</h1>
             </div>
             <form
               action={async () => {
@@ -266,7 +266,7 @@ export default async function AnalyticsPage({
         <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
           <div className="flex items-center gap-2 sm:gap-6">
             <NavBar />
-            <h1 className="text-lg font-bold sm:text-xl">Expense Tracker</h1>
+            <h1 className="text-lg font-bold sm:text-xl md:hidden">Expense Tracker</h1>
           </div>
           <form
             action={async () => {

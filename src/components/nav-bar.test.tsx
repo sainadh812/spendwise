@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NavBar } from "@/components/nav-bar";
 
 let mockPathname = "/";
@@ -14,30 +15,40 @@ afterEach(() => {
 });
 
 describe("NavBar", () => {
-  it("renders Dashboard, Analytics, Categories and Import links", () => {
+  it("renders primary nav links (Dashboard, Analytics, Recoverables) and a More trigger on desktop", () => {
     render(<NavBar />);
 
-    const dashboardLinks = screen.getAllByText("Dashboard");
-    const analyticsLinks = screen.getAllByText("Analytics");
-    const categoriesLinks = screen.getAllByText("Categories");
-    const importLinks = screen.getAllByText("Import");
-
-    expect(dashboardLinks.length).toBeGreaterThanOrEqual(1);
-    expect(analyticsLinks.length).toBeGreaterThanOrEqual(1);
-    expect(categoriesLinks.length).toBeGreaterThanOrEqual(1);
-    expect(importLinks.length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Dashboard").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Analytics").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("Recoverables").length).toBeGreaterThanOrEqual(
+      1
+    );
+    expect(screen.getByText("More")).toBeInTheDocument();
   });
 
-  it("renders desktop links with correct hrefs", () => {
+  it("renders desktop primary links with correct hrefs", () => {
     render(<NavBar />);
 
     const dashboardLink = screen.getAllByText("Dashboard")[0].closest("a");
     const analyticsLink = screen.getAllByText("Analytics")[0].closest("a");
-    const categoriesLink = screen.getAllByText("Categories")[0].closest("a");
+    const recoverablesLink = screen
+      .getAllByText("Recoverables")[0]
+      .closest("a");
 
     expect(dashboardLink).toHaveAttribute("href", "/");
     expect(analyticsLink).toHaveAttribute("href", "/analytics");
-    expect(categoriesLink).toHaveAttribute("href", "/categories");
+    expect(recoverablesLink).toHaveAttribute("href", "/recoverables");
+  });
+
+  it("reveals secondary items (Categories, Import, Debug) when the More menu is opened", async () => {
+    const user = userEvent.setup();
+    render(<NavBar />);
+
+    await user.click(screen.getByText("More"));
+
+    expect(await screen.findByText("Categories")).toBeInTheDocument();
+    expect(screen.getByText("Import")).toBeInTheDocument();
+    expect(screen.getByText("Debug")).toBeInTheDocument();
   });
 
   it("highlights Dashboard when on root path", () => {
@@ -70,12 +81,12 @@ describe("NavBar", () => {
     expect(analyticsLink?.className).toContain("bg-primary");
   });
 
-  it("highlights Categories for nested category paths", () => {
+  it("highlights the More trigger when on a secondary route", () => {
     mockPathname = "/categories/manage";
     render(<NavBar />);
 
-    const categoriesLink = screen.getAllByText("Categories")[0].closest("a");
-    expect(categoriesLink?.className).toContain("bg-primary");
+    const moreTrigger = screen.getByText("More").closest("button");
+    expect(moreTrigger?.className).toContain("bg-primary");
   });
 
   it("renders a mobile menu button", () => {

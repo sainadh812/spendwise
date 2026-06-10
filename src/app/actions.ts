@@ -269,6 +269,58 @@ export async function createTransaction(data: {
   await revalidateAppPaths();
 }
 
+export async function manuallyAddFromDebug(data: {
+  amount: number;
+  merchant: string;
+  date: string;
+  category: string;
+  subcategory?: string | null;
+  is_cc_payment: boolean;
+  email_message_id?: string | null;
+}) {
+  if (!(data.amount > 0)) throw new Error("Amount must be positive");
+  if (!data.merchant.trim()) throw new Error("Merchant is required");
+
+  const emailMessageId = data.email_message_id?.trim() || null;
+
+  if (emailMessageId) {
+    const existing = await prisma.transaction.findUnique({
+      where: { email_message_id: emailMessageId },
+    });
+    if (existing) {
+      throw new Error(
+        `Transaction already exists for this email (id: ${existing.id})`
+      );
+    }
+
+    await prisma.skippedEmail.deleteMany({
+      where: { email_message_id: emailMessageId },
+    });
+  }
+
+  const { categoryId, subcategoryId } = await resolveCategoryIds(
+    data.category,
+    data.subcategory ?? null
+  );
+
+  await prisma.transaction.create({
+    data: {
+      amount: data.amount,
+      merchant: data.merchant.trim(),
+      date: new Date(data.date),
+      category: data.category,
+      categoryId,
+      subcategoryId,
+      is_cc_payment: data.is_cc_payment,
+      confidence_score: 1.0,
+      needs_review: false,
+      email_message_id: emailMessageId,
+      source: emailMessageId ? "email_recovered" : "manual",
+    },
+  });
+  await revalidateAppPaths();
+}
+
 export async function approveTransaction(id: string) {
   await prisma.transaction.update({
     where: { id },

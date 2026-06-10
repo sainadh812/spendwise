@@ -1,6 +1,15 @@
 import { auth, signOut } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { getTransactions, getCategoriesWithSubs, getSkippedEmails, getBudgetForMonth } from "./actions";
+import {
+  getTransactions,
+  getCategoriesWithSubs,
+  getSkippedEmails,
+  getBudgetForMonth,
+  getTotalOutstanding,
+  getKnownCounterparties,
+} from "./actions";
+import { effectiveSpend } from "@/lib/recoverable";
+import { OutstandingCard } from "@/components/outstanding-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -39,20 +48,33 @@ export default async function Dashboard({
   const year =
     params.year !== undefined ? parseInt(params.year, 10) : now.getFullYear();
 
-  const [transactions, categories, skippedEmails, budget] = await Promise.all([
+  const [
+    transactions,
+    categories,
+    skippedEmails,
+    budget,
+    outstanding,
+    knownCounterparties,
+  ] = await Promise.all([
     getTransactions(month, year),
     getCategoriesWithSubs(),
     getSkippedEmails(),
     getBudgetForMonth(month, year),
+    getTotalOutstanding(),
+    getKnownCounterparties(),
   ] as const);
 
-  const totalSpend = transactions
+  const spendingTxns = transactions
     .filter((t) => !t.is_cc_payment)
-    .reduce((sum, t) => sum + t.amount, 0);
+    .map((t) => ({ t, effective: effectiveSpend(t) }))
+    .filter((entry) => entry.effective > 0);
 
-  const totalTransactions = transactions.filter(
-    (t) => !t.is_cc_payment
-  ).length;
+  const totalSpend = spendingTxns.reduce(
+    (sum, entry) => sum + entry.effective,
+    0
+  );
+
+  const totalTransactions = spendingTxns.length;
   const pendingReviews = transactions.filter((t) => t.needs_review).length;
   const avgTransaction =
     totalTransactions > 0 ? totalSpend / totalTransactions : 0;
@@ -61,7 +83,31 @@ export default async function Dashboard({
     ...t,
     date: t.date.toISOString(),
     subcategory: t.subcategoryRef?.name ?? null,
+    repayments: t.repayments.map((r) => ({
+      id: r.id,
+      transaction_id: r.transaction_id,
+      amount: r.amount,
+      date: r.date.toISOString(),
+      note: r.note,
+      created_at: r.created_at.toISOString(),
+    })),
   }));
+
+  // For charts, use the effective spend amount so recoverables don't inflate
+  // category/day totals. Fully-recovered transactions are filtered out.
+  const chartData = transactions
+    .map((t) => ({
+      id: t.id,
+      amount: effectiveSpend(t),
+      merchant: t.merchant,
+      date: t.date.toISOString(),
+      category: t.category,
+      subcategory: t.subcategoryRef?.name ?? null,
+      is_cc_payment: t.is_cc_payment,
+      confidence_score: t.confidence_score,
+      needs_review: t.needs_review,
+    }))
+    .filter((t) => t.amount > 0 || t.is_cc_payment);
 
   const serializedSkipped = skippedEmails.map((s) => ({
     ...s,
@@ -178,9 +224,16 @@ export default async function Dashboard({
           )}
         </div>
 
+        {outstanding.total > 0 && (
+          <OutstandingCard
+            total={outstanding.total}
+            counterpartyCount={outstanding.counterpartyCount}
+          />
+        )}
+
         <div className="grid gap-6 lg:grid-cols-2">
-          <CategoryPieChart transactions={serialized} />
-          <DailyBarChart transactions={serialized} />
+          <CategoryPieChart transactions={chartData} />
+          <DailyBarChart transactions={chartData} />
         </div>
 
         <Separator />
@@ -215,6 +268,7 @@ export default async function Dashboard({
             <TransactionTable
               transactions={serialized}
               categories={categories}
+              knownCounterparties={knownCounterparties}
             />
           </TabsContent>
           <TabsContent value="skipped" className="mt-4">

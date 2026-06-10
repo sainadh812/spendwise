@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { updateTransaction, deleteTransaction } from "@/app/actions";
+import {
+  updateTransaction,
+  deleteTransaction,
+  markRecoverable,
+} from "@/app/actions";
+import { effectiveSpend, RECOVERY_STATUS } from "@/lib/recoverable";
+import type { SerializedRepayment } from "@/app/actions";
+import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +41,16 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CategorySelect } from "@/components/category-select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Pencil, Trash2, X } from "lucide-react";
+import { HandCoins, Pencil, Trash2, X } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 interface Transaction {
   id: string;
@@ -47,6 +63,10 @@ interface Transaction {
   confidence_score: number;
   needs_review: boolean;
   remarks: string | null;
+  recoverable_amount?: number | null;
+  recovery_status?: string | null;
+  counterparty?: string | null;
+  repayments?: SerializedRepayment[];
 }
 
 type StatusFilter = "all" | "verified" | "needs_review" | "cc_payment";
@@ -65,9 +85,11 @@ function formatINR(value: number) {
 export function TransactionTable({
   transactions,
   categories,
+  knownCounterparties = [],
 }: {
   transactions: Transaction[];
   categories: { name: string; subcategories: { id: string; name: string }[] }[];
+  knownCounterparties?: string[];
 }) {
   const [search, setSearch] = useState("");
   const [categoryFilter, setCategoryFilter] = useState<string>(ALL_VALUE);
@@ -126,7 +148,17 @@ export function TransactionTable({
     () =>
       filtered
         .filter((t) => !t.is_cc_payment)
-        .reduce((sum, t) => sum + t.amount, 0),
+        .reduce(
+          (sum, t) =>
+            sum +
+            effectiveSpend({
+              amount: t.amount,
+              recoverable_amount: t.recoverable_amount ?? null,
+              recovery_status: t.recovery_status ?? null,
+              repayments: t.repayments,
+            }),
+          0
+        ),
     [filtered]
   );
 
@@ -134,7 +166,17 @@ export function TransactionTable({
     () =>
       transactions
         .filter((t) => !t.is_cc_payment)
-        .reduce((sum, t) => sum + t.amount, 0),
+        .reduce(
+          (sum, t) =>
+            sum +
+            effectiveSpend({
+              amount: t.amount,
+              recoverable_amount: t.recoverable_amount ?? null,
+              recovery_status: t.recovery_status ?? null,
+              repayments: t.repayments,
+            }),
+          0
+        ),
     [transactions]
   );
 
@@ -313,6 +355,7 @@ export function TransactionTable({
                   key={t.id}
                   transaction={t}
                   categories={categories}
+                  knownCounterparties={knownCounterparties}
                 />
               ))}
             </TableBody>
@@ -326,9 +369,11 @@ export function TransactionTable({
 function TransactionRow({
   transaction: t,
   categories,
+  knownCounterparties,
 }: {
   transaction: Transaction;
   categories: { name: string; subcategories: { id: string; name: string }[] }[];
+  knownCounterparties: string[];
 }) {
   const [editing, setEditing] = useState(false);
   const [merchant, setMerchant] = useState(t.merchant);
@@ -337,7 +382,15 @@ function TransactionRow({
   const [subcategory, setSubcategory] = useState<string | null>(t.subcategory ?? null);
   const [remarks, setRemarks] = useState(t.remarks ?? "");
   const [isCcPayment, setIsCcPayment] = useState(t.is_cc_payment);
+  const [recoverableOpen, setRecoverableOpen] = useState(false);
+  const [counterparty, setCounterparty] = useState(t.counterparty ?? "");
+  const [recoverableAmt, setRecoverableAmt] = useState(
+    t.recoverable_amount != null ? String(t.recoverable_amount) : String(t.amount)
+  );
   const [isPending, startTransition] = useTransition();
+
+  const isRecoverable = t.recoverable_amount != null;
+  const status = t.recovery_status ?? null;
 
   function handleSave() {
     startTransition(async () => {
@@ -414,6 +467,21 @@ function TransactionRow({
                 CC Payment
               </Badge>
             )}
+            {isRecoverable && status !== RECOVERY_STATUS.RECOVERED && (
+              <div className="mt-1 text-xs text-muted-foreground">
+                Effective:{" "}
+                <span className="font-medium text-foreground">
+                  {formatINR(
+                    effectiveSpend({
+                      amount: t.amount,
+                      recoverable_amount: t.recoverable_amount ?? null,
+                      recovery_status: t.recovery_status ?? null,
+                      repayments: t.repayments,
+                    })
+                  )}
+                </span>
+              </div>
+            )}
           </>
         )}
       </TableCell>
@@ -451,11 +519,40 @@ function TransactionRow({
         )}
       </TableCell>
       <TableCell>
-        {t.needs_review ? (
-          <Badge variant="destructive">Needs Review</Badge>
-        ) : (
-          <Badge variant="default">Verified</Badge>
-        )}
+        <div className="flex flex-col items-start gap-1">
+          {t.needs_review ? (
+            <Badge variant="destructive">Needs Review</Badge>
+          ) : (
+            <Badge variant="default">Verified</Badge>
+          )}
+          {isRecoverable && (
+            <Link
+              href="/recoverables"
+              className="inline-flex items-center"
+              title={`Owed by ${t.counterparty ?? ""}`}
+            >
+              <Badge
+                variant={
+                  status === RECOVERY_STATUS.RECOVERED
+                    ? "secondary"
+                    : status === RECOVERY_STATUS.WRITTEN_OFF
+                      ? "outline"
+                      : "default"
+                }
+                className="text-xs"
+              >
+                {status === RECOVERY_STATUS.RECOVERED
+                  ? "Recovered"
+                  : status === RECOVERY_STATUS.WRITTEN_OFF
+                    ? "Written off"
+                    : status === RECOVERY_STATUS.PARTIAL
+                      ? "Partial"
+                      : "Pending"}
+                {t.counterparty ? ` · ${t.counterparty}` : ""}
+              </Badge>
+            </Link>
+          )}
+        </div>
       </TableCell>
       <TableCell className="text-right">
         <div className="flex justify-end gap-1">
@@ -479,6 +576,18 @@ function TransactionRow({
               >
                 <Pencil className="h-4 w-4" />
               </Button>
+              {!isRecoverable && !t.is_cc_payment && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  onClick={() => setRecoverableOpen(true)}
+                  title="Mark as recoverable (lent / reimbursable)"
+                  disabled={isPending}
+                >
+                  <HandCoins className="h-4 w-4" />
+                </Button>
+              )}
               <AlertDialog>
                 <AlertDialogTrigger asChild>
                   <Button
@@ -509,6 +618,82 @@ function TransactionRow({
             </>
           )}
         </div>
+        <Dialog open={recoverableOpen} onOpenChange={setRecoverableOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Mark as recoverable</DialogTitle>
+              <DialogDescription>
+                Track this {formatINR(t.amount)} expense to {t.merchant} as
+                money owed to you. It will reduce your spend total as the
+                counterparty pays it back.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="space-y-1.5">
+                <Label htmlFor={`counterparty-${t.id}`}>Who owes you?</Label>
+                <Input
+                  id={`counterparty-${t.id}`}
+                  list={`counterparty-list-${t.id}`}
+                  value={counterparty}
+                  onChange={(e) => setCounterparty(e.target.value)}
+                  placeholder="e.g. Ravi, Office, Mom"
+                />
+                <datalist id={`counterparty-list-${t.id}`}>
+                  {knownCounterparties.map((c) => (
+                    <option key={c} value={c} />
+                  ))}
+                </datalist>
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`recoverable-${t.id}`}>Amount owed (₹)</Label>
+                <Input
+                  id={`recoverable-${t.id}`}
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max={t.amount}
+                  value={recoverableAmt}
+                  onChange={(e) => setRecoverableAmt(e.target.value)}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Defaults to full amount. Lower it if only part is owed
+                  (e.g. shared bill).
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                variant="ghost"
+                onClick={() => setRecoverableOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  const cp = counterparty.trim();
+                  const amt = parseFloat(recoverableAmt);
+                  if (!cp || !Number.isFinite(amt) || amt <= 0) return;
+                  startTransition(async () => {
+                    await markRecoverable(t.id, {
+                      counterparty: cp,
+                      recoverable_amount: amt,
+                    });
+                    setRecoverableOpen(false);
+                  });
+                }}
+                disabled={
+                  isPending ||
+                  counterparty.trim() === "" ||
+                  !Number.isFinite(parseFloat(recoverableAmt)) ||
+                  parseFloat(recoverableAmt) <= 0 ||
+                  parseFloat(recoverableAmt) > t.amount
+                }
+              >
+                Mark recoverable
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </TableCell>
     </TableRow>
   );

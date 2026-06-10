@@ -1,4 +1,5 @@
 import { type Period, periodKey, periodLabel } from "@/lib/insights-period";
+import { effectiveSpend } from "@/lib/recoverable";
 
 export interface InsightStatsTransaction {
   amount: number;
@@ -7,6 +8,13 @@ export interface InsightStatsTransaction {
   date: Date;
   is_cc_payment: boolean;
   needs_review: boolean;
+  recoverable_amount?: number | null;
+  recovery_status?: string | null;
+  repayments?: { amount: number }[];
+}
+
+interface SpendingTransaction extends InsightStatsTransaction {
+  amount: number;
 }
 
 export interface CategoryTotal {
@@ -78,8 +86,19 @@ function groupBy<T extends { amount: number }>(
 
 function filterSpending(
   rows: InsightStatsTransaction[]
-): InsightStatsTransaction[] {
-  return rows.filter((t) => !t.is_cc_payment && !t.needs_review);
+): SpendingTransaction[] {
+  return rows
+    .filter((t) => !t.is_cc_payment && !t.needs_review)
+    .map((t) => ({
+      ...t,
+      amount: effectiveSpend({
+        amount: t.amount,
+        recoverable_amount: t.recoverable_amount ?? null,
+        recovery_status: t.recovery_status ?? null,
+        repayments: t.repayments,
+      }),
+    }))
+    .filter((t) => t.amount > 0);
 }
 
 export function computeStatsFromTransactions(

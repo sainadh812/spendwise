@@ -11,6 +11,14 @@ import {
   MIN_TRANSACTIONS_FOR_INSIGHTS,
   type InsightResult,
 } from "@/lib/insights-config";
+import {
+  RECOVERY_STATUS,
+  computeRecoveryStatus,
+  isRecoveryStatus,
+  outstandingAmount,
+  sumRepayments,
+  type RecoveryStatus,
+} from "@/lib/recoverable";
 
 export interface CategoryWithSubs {
   id: string;
@@ -22,6 +30,7 @@ async function revalidateAppPaths() {
   revalidatePath("/");
   revalidatePath("/analytics");
   revalidatePath("/categories");
+  revalidatePath("/recoverables");
 }
 
 export async function getTransactions(month?: number, year?: number) {
@@ -40,6 +49,7 @@ export async function getTransactions(month?: number, year?: number) {
     include: {
       categoryRef: true,
       subcategoryRef: true,
+      repayments: { orderBy: { date: "asc" } },
     },
   });
 }
@@ -380,6 +390,7 @@ export async function getTransactionsForYear(year: number) {
     include: {
       categoryRef: true,
       subcategoryRef: true,
+      repayments: { orderBy: { date: "asc" } },
     },
   });
 }
@@ -394,6 +405,7 @@ export async function getTransactionsForRange(
     include: {
       categoryRef: true,
       subcategoryRef: true,
+      repayments: { orderBy: { date: "asc" } },
     },
   });
 }
@@ -813,4 +825,319 @@ ${JSON.stringify(stats, null, 2)}`;
       generatedAt: saved.updated_at.toISOString(),
     },
   };
+}
+
+// ---------- Recoverable transactions ----------
+
+export interface SerializedRepayment {
+  id: string;
+  transaction_id: string;
+  amount: number;
+  date: string;
+  note: string | null;
+  created_at: string;
+}
+
+export interface RecoverableTransactionDTO {
+  id: string;
+  amount: number;
+  merchant: string;
+  date: string;
+  category: string;
+  subcategory: string | null;
+  counterparty: string;
+  recoverable_amount: number;
+  recovery_status: RecoveryStatus;
+  repayments: SerializedRepayment[];
+  outstanding: number;
+  repaid: number;
+}
+
+export interface CounterpartyGroup {
+  counterparty: string;
+  outstanding: number;
+  total_lent: number;
+  total_repaid: number;
+  transactions: RecoverableTransactionDTO[];
+}
+
+async function recomputeRecoveryStatus(transactionId: string) {
+  const tx = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    include: { repayments: true },
+  });
+  if (!tx || tx.recoverable_amount == null) return;
+  const current = isRecoveryStatus(tx.recovery_status)
+    ? tx.recovery_status
+    : null;
+  const repaid = sumRepayments(tx.repayments);
+  const next = computeRecoveryStatus(tx.recoverable_amount, repaid, current);
+  if (next !== tx.recovery_status) {
+    await prisma.transaction.update({
+      where: { id: transactionId },
+      data: { recovery_status: next },
+    });
+  }
+}
+
+export async function markRecoverable(
+  transactionId: string,
+  data: { counterparty: string; recoverable_amount?: number }
+) {
+  const counterparty = data.counterparty.trim();
+  if (!counterparty) throw new Error("Counterparty is required");
+
+  const tx = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+  });
+  if (!tx) throw new Error("Transaction not found");
+
+  const recoverable =
+    data.recoverable_amount !== undefined
+      ? data.recoverable_amount
+      : tx.amount;
+  if (recoverable <= 0) throw new Error("Recoverable amount must be positive");
+  if (recoverable > tx.amount) {
+    throw new Error("Recoverable amount cannot exceed transaction amount");
+  }
+
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: {
+      counterparty,
+      recoverable_amount: recoverable,
+      recovery_status: RECOVERY_STATUS.PENDING,
+    },
+  });
+  await recomputeRecoveryStatus(transactionId);
+  await revalidateAppPaths();
+}
+
+export async function unmarkRecoverable(transactionId: string) {
+  await prisma.repayment.deleteMany({
+    where: { transaction_id: transactionId },
+  });
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: {
+      counterparty: null,
+      recoverable_amount: null,
+      recovery_status: null,
+    },
+  });
+  await revalidateAppPaths();
+}
+
+export async function addRepayment(
+  transactionId: string,
+  data: { amount: number; date: string; note?: string | null }
+) {
+  if (data.amount <= 0) throw new Error("Repayment amount must be positive");
+
+  const tx = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+  });
+  if (!tx) throw new Error("Transaction not found");
+  if (tx.recoverable_amount == null) {
+    throw new Error("Transaction is not marked as recoverable");
+  }
+
+  await prisma.repayment.create({
+    data: {
+      transaction_id: transactionId,
+      amount: data.amount,
+      date: new Date(data.date),
+      note: data.note?.trim() || null,
+    },
+  });
+  await recomputeRecoveryStatus(transactionId);
+  await revalidateAppPaths();
+}
+
+export async function updateRepayment(
+  repaymentId: string,
+  data: { amount?: number; date?: string; note?: string | null }
+) {
+  if (data.amount !== undefined && data.amount <= 0) {
+    throw new Error("Repayment amount must be positive");
+  }
+
+  const repayment = await prisma.repayment.findUnique({
+    where: { id: repaymentId },
+  });
+  if (!repayment) throw new Error("Repayment not found");
+
+  const updateData: Record<string, unknown> = {};
+  if (data.amount !== undefined) updateData.amount = data.amount;
+  if (data.date !== undefined) updateData.date = new Date(data.date);
+  if (data.note !== undefined) updateData.note = data.note?.trim() || null;
+
+  await prisma.repayment.update({
+    where: { id: repaymentId },
+    data: updateData,
+  });
+  await recomputeRecoveryStatus(repayment.transaction_id);
+  await revalidateAppPaths();
+}
+
+export async function deleteRepayment(repaymentId: string) {
+  const repayment = await prisma.repayment.findUnique({
+    where: { id: repaymentId },
+  });
+  if (!repayment) throw new Error("Repayment not found");
+
+  await prisma.repayment.delete({ where: { id: repaymentId } });
+  await recomputeRecoveryStatus(repayment.transaction_id);
+  await revalidateAppPaths();
+}
+
+export async function writeOffRecoverable(transactionId: string) {
+  const tx = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+  });
+  if (!tx) throw new Error("Transaction not found");
+  if (tx.recoverable_amount == null) {
+    throw new Error("Transaction is not marked as recoverable");
+  }
+
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { recovery_status: RECOVERY_STATUS.WRITTEN_OFF },
+  });
+  await revalidateAppPaths();
+}
+
+export async function reopenRecoverable(transactionId: string) {
+  const tx = await prisma.transaction.findUnique({
+    where: { id: transactionId },
+    include: { repayments: true },
+  });
+  if (!tx) throw new Error("Transaction not found");
+  if (tx.recoverable_amount == null) {
+    throw new Error("Transaction is not marked as recoverable");
+  }
+
+  const repaid = sumRepayments(tx.repayments);
+  const next = computeRecoveryStatus(tx.recoverable_amount, repaid, null);
+  await prisma.transaction.update({
+    where: { id: transactionId },
+    data: { recovery_status: next },
+  });
+  await revalidateAppPaths();
+}
+
+export async function getRecoverables(): Promise<CounterpartyGroup[]> {
+  const rows = await prisma.transaction.findMany({
+    where: {
+      recoverable_amount: { not: null },
+      counterparty: { not: null },
+    },
+    orderBy: { date: "desc" },
+    include: {
+      subcategoryRef: true,
+      repayments: { orderBy: { date: "asc" } },
+    },
+  });
+
+  const groups = new Map<string, CounterpartyGroup>();
+
+  for (const tx of rows) {
+    const counterparty = tx.counterparty ?? "Unknown";
+    const status = isRecoveryStatus(tx.recovery_status)
+      ? tx.recovery_status
+      : RECOVERY_STATUS.PENDING;
+    const recoverableAmount = tx.recoverable_amount ?? 0;
+    const repaid = sumRepayments(tx.repayments);
+    const outstanding = outstandingAmount({
+      amount: tx.amount,
+      recoverable_amount: recoverableAmount,
+      recovery_status: status,
+      repayments: tx.repayments,
+    });
+
+    const dto: RecoverableTransactionDTO = {
+      id: tx.id,
+      amount: tx.amount,
+      merchant: tx.merchant,
+      date: tx.date.toISOString(),
+      category: tx.category,
+      subcategory: tx.subcategoryRef?.name ?? null,
+      counterparty,
+      recoverable_amount: recoverableAmount,
+      recovery_status: status,
+      repayments: tx.repayments.map((r) => ({
+        id: r.id,
+        transaction_id: r.transaction_id,
+        amount: r.amount,
+        date: r.date.toISOString(),
+        note: r.note,
+        created_at: r.created_at.toISOString(),
+      })),
+      outstanding,
+      repaid,
+    };
+
+    const group =
+      groups.get(counterparty) ??
+      ({
+        counterparty,
+        outstanding: 0,
+        total_lent: 0,
+        total_repaid: 0,
+        transactions: [],
+      } satisfies CounterpartyGroup);
+
+    group.transactions.push(dto);
+    group.outstanding += outstanding;
+    group.total_lent += recoverableAmount;
+    group.total_repaid += repaid;
+    groups.set(counterparty, group);
+  }
+
+  return [...groups.values()].sort((a, b) => b.outstanding - a.outstanding);
+}
+
+export async function getTotalOutstanding(): Promise<{
+  total: number;
+  counterpartyCount: number;
+}> {
+  const rows = await prisma.transaction.findMany({
+    where: {
+      recoverable_amount: { not: null },
+      recovery_status: { in: [RECOVERY_STATUS.PENDING, RECOVERY_STATUS.PARTIAL] },
+    },
+    select: {
+      amount: true,
+      recoverable_amount: true,
+      recovery_status: true,
+      counterparty: true,
+      repayments: { select: { amount: true } },
+    },
+  });
+
+  let total = 0;
+  const counterparties = new Set<string>();
+  for (const tx of rows) {
+    total += outstandingAmount({
+      amount: tx.amount,
+      recoverable_amount: tx.recoverable_amount,
+      recovery_status: tx.recovery_status,
+      repayments: tx.repayments,
+    });
+    if (tx.counterparty) counterparties.add(tx.counterparty);
+  }
+
+  return { total, counterpartyCount: counterparties.size };
+}
+
+export async function getKnownCounterparties(): Promise<string[]> {
+  const rows = await prisma.transaction.findMany({
+    where: { counterparty: { not: null } },
+    select: { counterparty: true },
+    distinct: ["counterparty"],
+    orderBy: { counterparty: "asc" },
+  });
+  return rows
+    .map((r) => r.counterparty)
+    .filter((c): c is string => c !== null);
 }

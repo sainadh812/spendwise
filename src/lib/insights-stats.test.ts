@@ -160,4 +160,72 @@ describe("computeStatsFromTransactions", () => {
     expect(stats.totalSpend).toBe(0);
     expect(stats.txCount).toBe(0);
   });
+
+  it("excludes fully recovered transactions from spend", () => {
+    const current = [
+      tx({ amount: 1000 }),
+      tx({
+        amount: 4000,
+        recoverable_amount: 4000,
+        recovery_status: "recovered",
+        repayments: [{ amount: 4000 }],
+      }),
+    ];
+    const stats = computeStatsFromTransactions(monthPeriod, current, []);
+    expect(stats.totalSpend).toBe(1000);
+    expect(stats.txCount).toBe(1);
+  });
+
+  it("counts written-off transactions as full expense when no repayments", () => {
+    const current = [
+      tx({
+        amount: 4000,
+        recoverable_amount: 4000,
+        recovery_status: "written_off",
+      }),
+    ];
+    const stats = computeStatsFromTransactions(monthPeriod, current, []);
+    expect(stats.totalSpend).toBe(4000);
+  });
+
+  it("subtracts repayments from written-off transactions", () => {
+    // Lent 4000, recovered 2000, wrote off the rest -> 2000 real expense.
+    const current = [
+      tx({
+        amount: 4000,
+        recoverable_amount: 4000,
+        recovery_status: "written_off",
+        repayments: [{ amount: 2000 }],
+      }),
+    ];
+    const stats = computeStatsFromTransactions(monthPeriod, current, []);
+    expect(stats.totalSpend).toBe(2000);
+  });
+
+  it("subtracts partial repayments from spend", () => {
+    const current = [
+      tx({
+        amount: 4000,
+        recoverable_amount: 4000,
+        recovery_status: "partial",
+        repayments: [{ amount: 2000 }],
+      }),
+    ];
+    const stats = computeStatsFromTransactions(monthPeriod, current, []);
+    expect(stats.totalSpend).toBe(2000);
+    expect(stats.txCount).toBe(1);
+  });
+
+  it("keeps non-recoverable portion when only part of spend was lent", () => {
+    const current = [
+      tx({
+        amount: 5000,
+        recoverable_amount: 3000,
+        recovery_status: "partial",
+        repayments: [{ amount: 1000 }],
+      }),
+    ];
+    const stats = computeStatsFromTransactions(monthPeriod, current, []);
+    expect(stats.totalSpend).toBe(4000);
+  });
 });

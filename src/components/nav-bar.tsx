@@ -4,7 +4,14 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
-import { BarChart3, FolderTree, LayoutDashboard, Menu, Upload } from "lucide-react";
+import {
+  BarChart3,
+  FolderTree,
+  HandCoins,
+  LayoutDashboard,
+  Menu,
+  Upload,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -17,6 +24,7 @@ import {
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard", icon: LayoutDashboard },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/recoverables", label: "Recoverables", icon: HandCoins },
   { href: "/categories", label: "Categories", icon: FolderTree },
   { href: "/import", label: "Import", icon: Upload },
 ];

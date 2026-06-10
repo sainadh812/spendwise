@@ -32,6 +32,9 @@ export async function computeInsightStats(
         date: true,
         is_cc_payment: true,
         needs_review: true,
+        recoverable_amount: true,
+        recovery_status: true,
+        repayments: { select: { amount: true } },
       },
     }),
     prisma.transaction.findMany({
@@ -43,6 +46,9 @@ export async function computeInsightStats(
         date: true,
         is_cc_payment: true,
         needs_review: true,
+        recoverable_amount: true,
+        recovery_status: true,
+        repayments: { select: { amount: true } },
       },
     }),
   ]);

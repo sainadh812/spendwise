@@ -21,27 +21,44 @@ model Category {
 }
 
 model Transaction {
-  id               String    @id @default(uuid())
-  amount           Float
-  merchant         String
-  date             DateTime
-  category         String
-  categoryId       String?
-  subcategoryId    String?
-  categoryRef      Category? @relation("TransactionCategory", fields: [categoryId], references: [id])
-  subcategoryRef   Category? @relation("TransactionSubcategory", fields: [subcategoryId], references: [id])
-  is_cc_payment    Boolean   @default(false)
-  confidence_score Float
-  needs_review     Boolean   @default(true)
-  email_message_id String?   @unique
-  remarks          String?
-  source           String    @default("email")
-  created_at       DateTime  @default(now())
-  updated_at       DateTime  @updatedAt
+  id                  String      @id @default(uuid())
+  amount              Float
+  merchant            String
+  date                DateTime
+  category            String
+  categoryId          String?
+  subcategoryId       String?
+  categoryRef         Category?   @relation("TransactionCategory", fields: [categoryId], references: [id])
+  subcategoryRef      Category?   @relation("TransactionSubcategory", fields: [subcategoryId], references: [id])
+  is_cc_payment       Boolean     @default(false)
+  confidence_score    Float
+  needs_review        Boolean     @default(true)
+  email_message_id    String?     @unique
+  remarks             String?
+  source              String      @default("email")
+  recoverable_amount  Float?
+  counterparty        String?
+  recovery_status     String?
+  repayments          Repayment[]
+  created_at          DateTime    @default(now())
+  updated_at          DateTime    @updatedAt
 
   @@index([amount, merchant, date], name: "idx_dedup")
   @@index([categoryId])
   @@index([subcategoryId])
+  @@index([recovery_status, counterparty])
+}
+
+model Repayment {
+  id             String      @id @default(uuid())
+  transaction_id String
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  amount         Float
+  date           DateTime
+  note           String?
+  created_at     DateTime    @default(now())
+
+  @@index([transaction_id])
 }
 
 model Budget {

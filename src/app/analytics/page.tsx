@@ -7,6 +7,7 @@ import {
   getBudgetForMonth,
   getCachedInsight,
 } from "@/app/actions";
+import { effectiveSpend } from "@/lib/recoverable";
 import { InsightsCard } from "@/components/insights-card";
 import type { Period } from "@/lib/insights-period";
 import { Button } from "@/components/ui/button";
@@ -28,25 +29,52 @@ import {
   BudgetVsActualChart,
 } from "@/components/analytics-charts";
 
-function computeStats(
-  transactions: { amount: number; is_cc_payment: boolean }[]
-) {
-  const spending = transactions.filter((t) => !t.is_cc_payment);
-  const totalSpend = spending.reduce((s, t) => s + t.amount, 0);
+interface StatsTransaction {
+  amount: number;
+  is_cc_payment: boolean;
+  recoverable_amount: number | null;
+  recovery_status: string | null;
+  repayments?: { amount: number }[];
+}
+
+function computeStats(transactions: StatsTransaction[]) {
+  const spending = transactions
+    .filter((t) => !t.is_cc_payment)
+    .map((t) => effectiveSpend(t))
+    .filter((amt) => amt > 0);
+  const totalSpend = spending.reduce((s, amt) => s + amt, 0);
   const totalTransactions = spending.length;
-  const avgTransaction = totalTransactions > 0 ? totalSpend / totalTransactions : 0;
-  const maxSingleSpend = spending.length > 0
-    ? Math.max(...spending.map((t) => t.amount))
-    : 0;
+  const avgTransaction =
+    totalTransactions > 0 ? totalSpend / totalTransactions : 0;
+  const maxSingleSpend =
+    spending.length > 0 ? Math.max(...spending) : 0;
   return { totalSpend, totalTransactions, avgTransaction, maxSingleSpend };
 }
 
 function serialize(
-  transactions: { id: string; amount: number; merchant: string; date: Date; category: string; subcategoryRef?: { name: string } | null; is_cc_payment: boolean; confidence_score: number; needs_review: boolean; email_message_id: string | null; remarks: string | null; source: string; created_at: Date; updated_at: Date }[]
+  transactions: {
+    id: string;
+    amount: number;
+    merchant: string;
+    date: Date;
+    category: string;
+    subcategoryRef?: { name: string } | null;
+    is_cc_payment: boolean;
+    confidence_score: number;
+    needs_review: boolean;
+    email_message_id: string | null;
+    remarks: string | null;
+    source: string;
+    created_at: Date;
+    updated_at: Date;
+    recoverable_amount: number | null;
+    recovery_status: string | null;
+    repayments: { amount: number }[];
+  }[]
 ) {
   return transactions.map((t) => ({
     id: t.id,
-    amount: t.amount,
+    amount: effectiveSpend(t),
     merchant: t.merchant,
     date: t.date.toISOString(),
     category: t.category,

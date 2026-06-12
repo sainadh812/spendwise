@@ -321,6 +321,28 @@ export async function manuallyAddFromDebug(data: {
   await revalidateAppPaths();
 }
 
+export async function cloneTransaction(id: string, newDate: string) {
+  const source = await prisma.transaction.findUnique({ where: { id } });
+  if (!source) throw new Error("Transaction not found");
+
+  await prisma.transaction.create({
+    data: {
+      amount: source.amount,
+      merchant: source.merchant,
+      date: new Date(newDate),
+      category: source.category,
+      categoryId: source.categoryId,
+      subcategoryId: source.subcategoryId,
+      is_cc_payment: source.is_cc_payment,
+      remarks: source.remarks,
+      confidence_score: 1.0,
+      needs_review: false,
+      source: "manual",
+    },
+  });
+  await revalidateAppPaths();
+}
+
 export async function approveTransaction(id: string) {
   await prisma.transaction.update({
     where: { id },

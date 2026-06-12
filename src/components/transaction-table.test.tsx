@@ -6,6 +6,8 @@ import { TransactionTable } from "@/components/transaction-table";
 vi.mock("@/app/actions", () => ({
   updateTransaction: vi.fn(),
   deleteTransaction: vi.fn(),
+  cloneTransaction: vi.fn(),
+  markRecoverable: vi.fn(),
 }));
 
 const mockTransaction = {
@@ -116,5 +118,59 @@ describe("TransactionTable delete confirmation", () => {
     await user.click(confirmButton);
 
     expect(deleteTransaction).toHaveBeenCalledWith("txn-1");
+  });
+});
+
+describe("TransactionTable clone", () => {
+  it("does not call cloneTransaction until the copy is confirmed", async () => {
+    const { cloneTransaction } = await import("@/app/actions");
+    const user = userEvent.setup();
+
+    render(
+      <TransactionTable
+        transactions={[mockTransaction]}
+        categories={categories}
+      />
+    );
+
+    await user.click(
+      document.querySelector(
+        '[title="Clone (duplicate for a recurring expense)"]'
+      ) as HTMLElement
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByText("Clone transaction")).toBeInTheDocument();
+    expect(cloneTransaction).not.toHaveBeenCalled();
+  });
+
+  it("calls cloneTransaction with the chosen date when confirmed", async () => {
+    const { cloneTransaction } = await import("@/app/actions");
+    const user = userEvent.setup();
+
+    render(
+      <TransactionTable
+        transactions={[mockTransaction]}
+        categories={categories}
+      />
+    );
+
+    await user.click(
+      document.querySelector(
+        '[title="Clone (duplicate for a recurring expense)"]'
+      ) as HTMLElement
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const confirmButton = within(dialog).getByRole("button", {
+      name: "Create copy",
+    });
+    await user.click(confirmButton);
+
+    expect(cloneTransaction).toHaveBeenCalledTimes(1);
+    expect(cloneTransaction).toHaveBeenCalledWith(
+      "txn-1",
+      expect.any(String)
+    );
   });
 });

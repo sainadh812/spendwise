@@ -1,9 +1,12 @@
 {
   "name": "expense_tracker",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "private": true,
   "scripts": {
-    "dev": "NODE_OPTIONS='--inspect' next dev -p 3003",
+    "dev": "concurrently -k -n prisma,next -c magenta,cyan \"npm:dev:prisma\" \"npm:dev:next\"",
+    "dev:prisma": "prisma dev",
+    "dev:next": "wait-on tcp:51214 && NODE_OPTIONS='--inspect' next dev -p 3003",
+    "dev:only": "NODE_OPTIONS='--inspect' next dev -p 3003",
     "build": "prisma generate && prisma migrate deploy && node scripts/sync-categories.mjs && next build",
     "start": "next start -p 3003",
     "lint": "eslint",
@@ -48,6 +51,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "concurrently": "^10.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "happy-dom": "^20.8.4",
@@ -56,6 +60,7 @@
     "tailwindcss": "^4",
     "tw-animate-css": "^1.4.0",
     "typescript": "^5",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wait-on": "^9.0.10"
   }
 }

@@ -5,6 +5,7 @@ import {
   updateTransaction,
   deleteTransaction,
   markRecoverable,
+  cloneTransaction,
 } from "@/app/actions";
 import { effectiveSpend, RECOVERY_STATUS } from "@/lib/recoverable";
 import type { SerializedRepayment } from "@/app/actions";
@@ -41,7 +42,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CategorySelect } from "@/components/category-select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { HandCoins, Pencil, Trash2, X } from "lucide-react";
+import { Copy, HandCoins, Pencil, Trash2, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +81,12 @@ function formatINR(value: number) {
     currency: "INR",
     maximumFractionDigits: 0,
   }).format(value);
+}
+
+function toDateInputValue(date: string | Date) {
+  const d = new Date(date);
+  const offset = d.getTimezoneOffset();
+  return new Date(d.getTime() - offset * 60000).toISOString().slice(0, 10);
 }
 
 export function TransactionTable({
@@ -383,6 +390,8 @@ function TransactionRow({
   const [remarks, setRemarks] = useState(t.remarks ?? "");
   const [isCcPayment, setIsCcPayment] = useState(t.is_cc_payment);
   const [recoverableOpen, setRecoverableOpen] = useState(false);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneDate, setCloneDate] = useState(() => toDateInputValue(t.date));
   const [counterparty, setCounterparty] = useState(t.counterparty ?? "");
   const [recoverableAmt, setRecoverableAmt] = useState(
     t.recoverable_amount != null ? String(t.recoverable_amount) : String(t.amount)
@@ -408,6 +417,13 @@ function TransactionRow({
 
   function handleDelete() {
     startTransition(() => deleteTransaction(t.id));
+  }
+
+  function handleClone() {
+    startTransition(async () => {
+      await cloneTransaction(t.id, new Date(cloneDate).toISOString());
+      setCloneOpen(false);
+    });
   }
 
   function handleCancel() {
@@ -576,6 +592,19 @@ function TransactionRow({
               >
                 <Pencil className="h-4 w-4" />
               </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                onClick={() => {
+                  setCloneDate(toDateInputValue(t.date));
+                  setCloneOpen(true);
+                }}
+                title="Clone (duplicate for a recurring expense)"
+                disabled={isPending}
+              >
+                <Copy className="h-4 w-4" />
+              </Button>
               {!isRecoverable && !t.is_cc_payment && (
                 <Button
                   size="icon"
@@ -618,6 +647,38 @@ function TransactionRow({
             </>
           )}
         </div>
+        <Dialog open={cloneOpen} onOpenChange={setCloneOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Clone transaction</DialogTitle>
+              <DialogDescription>
+                Create a copy of the {formatINR(t.amount)} expense to{" "}
+                {t.merchant}. Pick the date for the new transaction — handy for
+                recurring expenses.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-1.5">
+              <Label htmlFor={`clone-date-${t.id}`}>New date</Label>
+              <Input
+                id={`clone-date-${t.id}`}
+                type="date"
+                value={cloneDate}
+                onChange={(e) => setCloneDate(e.target.value)}
+              />
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setCloneOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={handleClone}
+                disabled={isPending || cloneDate.trim() === ""}
+              >
+                Create copy
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
         <Dialog open={recoverableOpen} onOpenChange={setRecoverableOpen}>
           <DialogContent>
             <DialogHeader>

@@ -39,6 +39,7 @@ model Transaction {
   recoverable_amount  Float?
   counterparty        String?
   recovery_status     String?
+  group_id            String?
   repayments          Repayment[]
   created_at          DateTime    @default(now())
   updated_at          DateTime    @updatedAt
@@ -47,6 +48,7 @@ model Transaction {
   @@index([categoryId])
   @@index([subcategoryId])
   @@index([recovery_status, counterparty])
+  @@index([group_id])
 }
 
 model Repayment {

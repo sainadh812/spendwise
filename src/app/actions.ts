@@ -396,7 +396,83 @@ export async function updateTransaction(
 }
 
 export async function deleteTransaction(id: string) {
+  const tx = await prisma.transaction.findUnique({
+    where: { id },
+    select: { group_id: true },
+  });
+
   await prisma.transaction.delete({ where: { id } });
+
+  if (tx?.group_id) {
+    await cleanupGroup(tx.group_id);
+  }
+
+  await revalidateAppPaths();
+}
+
+async function cleanupGroup(groupId: string) {
+  const remaining = await prisma.transaction.findMany({
+    where: { group_id: groupId },
+    select: { id: true },
+  });
+  if (remaining.length <= 1) {
+    await prisma.transaction.updateMany({
+      where: { group_id: groupId },
+      data: { group_id: null },
+    });
+  }
+}
+
+export async function groupTransactions(ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids));
+  if (uniqueIds.length < 2) {
+    throw new Error("Select at least two transactions to group");
+  }
+
+  const txns = await prisma.transaction.findMany({
+    where: { id: { in: uniqueIds } },
+    select: { id: true, group_id: true },
+  });
+
+  if (txns.length !== uniqueIds.length) {
+    throw new Error("Some transactions were not found");
+  }
+
+  const existingGroupId = txns.find((t) => t.group_id)?.group_id;
+  const groupId = existingGroupId ?? crypto.randomUUID();
+
+  await prisma.transaction.updateMany({
+    where: { id: { in: uniqueIds } },
+    data: { group_id: groupId },
+  });
+
+  await revalidateAppPaths();
+  return groupId;
+}
+
+export async function ungroupTransaction(id: string) {
+  const tx = await prisma.transaction.findUnique({
+    where: { id },
+    select: { group_id: true },
+  });
+
+  await prisma.transaction.update({
+    where: { id },
+    data: { group_id: null },
+  });
+
+  if (tx?.group_id) {
+    await cleanupGroup(tx.group_id);
+  }
+
+  await revalidateAppPaths();
+}
+
+export async function ungroupAll(groupId: string) {
+  await prisma.transaction.updateMany({
+    where: { group_id: groupId },
+    data: { group_id: null },
+  });
   await revalidateAppPaths();
 }
 

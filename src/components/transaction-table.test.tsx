@@ -8,6 +8,8 @@ vi.mock("@/app/actions", () => ({
   deleteTransaction: vi.fn(),
   cloneTransaction: vi.fn(),
   markRecoverable: vi.fn(),
+  groupTransactions: vi.fn(),
+  ungroupAll: vi.fn(),
 }));
 
 const mockTransaction = {

@@ -6,6 +6,8 @@ import {
   deleteTransaction,
   markRecoverable,
   cloneTransaction,
+  groupTransactions,
+  ungroupAll,
 } from "@/app/actions";
 import { effectiveSpend, RECOVERY_STATUS } from "@/lib/recoverable";
 import type { SerializedRepayment } from "@/app/actions";
@@ -42,7 +44,17 @@ import {
 } from "@/components/ui/alert-dialog";
 import { CategorySelect } from "@/components/category-select";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Copy, HandCoins, Pencil, Trash2, X } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Copy,
+  HandCoins,
+  Layers,
+  Pencil,
+  Trash2,
+  Ungroup,
+  X,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -67,10 +79,24 @@ interface Transaction {
   recoverable_amount?: number | null;
   recovery_status?: string | null;
   counterparty?: string | null;
+  group_id?: string | null;
   repayments?: SerializedRepayment[];
 }
 
+function txEffectiveSpend(t: Transaction) {
+  return effectiveSpend({
+    amount: t.amount,
+    recoverable_amount: t.recoverable_amount ?? null,
+    recovery_status: t.recovery_status ?? null,
+    repayments: t.repayments,
+  });
+}
+
 type StatusFilter = "all" | "verified" | "needs_review" | "cc_payment";
+
+type DisplayRow =
+  | { kind: "single"; transaction: Transaction }
+  | { kind: "group"; groupId: string; members: Transaction[] };
 
 const ALL_VALUE = "__all__";
 const NONE_VALUE = "__none__";
@@ -104,6 +130,31 @@ export function TransactionTable({
   const [status, setStatus] = useState<StatusFilter>("all");
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [isGrouping, startGrouping] = useTransition();
+
+  function toggleSelected(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function exitSelectionMode() {
+    setSelectionMode(false);
+    setSelected(new Set());
+  }
+
+  function handleGroupSelected() {
+    if (selected.size < 2) return;
+    startGrouping(async () => {
+      await groupTransactions(Array.from(selected));
+      exitSelectionMode();
+    });
+  }
 
   const availableSubcategories = useMemo(() => {
     if (categoryFilter === ALL_VALUE) return [];
@@ -155,17 +206,7 @@ export function TransactionTable({
     () =>
       filtered
         .filter((t) => !t.is_cc_payment)
-        .reduce(
-          (sum, t) =>
-            sum +
-            effectiveSpend({
-              amount: t.amount,
-              recoverable_amount: t.recoverable_amount ?? null,
-              recovery_status: t.recovery_status ?? null,
-              repayments: t.repayments,
-            }),
-          0
-        ),
+        .reduce((sum, t) => sum + txEffectiveSpend(t), 0),
     [filtered]
   );
 
@@ -173,19 +214,35 @@ export function TransactionTable({
     () =>
       transactions
         .filter((t) => !t.is_cc_payment)
-        .reduce(
-          (sum, t) =>
-            sum +
-            effectiveSpend({
-              amount: t.amount,
-              recoverable_amount: t.recoverable_amount ?? null,
-              recovery_status: t.recovery_status ?? null,
-              repayments: t.repayments,
-            }),
-          0
-        ),
+        .reduce((sum, t) => sum + txEffectiveSpend(t), 0),
     [transactions]
   );
+
+  const displayRows = useMemo<DisplayRow[]>(() => {
+    const groups = new Map<string, Transaction[]>();
+    const rows: DisplayRow[] = [];
+
+    for (const t of filtered) {
+      if (t.group_id) {
+        const arr = groups.get(t.group_id) ?? [];
+        arr.push(t);
+        groups.set(t.group_id, arr);
+      }
+    }
+
+    const emitted = new Set<string>();
+    for (const t of filtered) {
+      if (t.group_id && (groups.get(t.group_id)?.length ?? 0) > 1) {
+        if (emitted.has(t.group_id)) continue;
+        emitted.add(t.group_id);
+        const members = groups.get(t.group_id)!;
+        rows.push({ kind: "group", groupId: t.group_id, members });
+      } else {
+        rows.push({ kind: "single", transaction: t });
+      }
+    }
+    return rows;
+  }, [filtered]);
 
   const hasActiveFilters =
     search.trim() !== "" ||
@@ -298,17 +355,50 @@ export function TransactionTable({
               className="h-9 w-28"
               aria-label="Maximum amount"
             />
-            {hasActiveFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={clearFilters}
-                className="ml-auto h-9"
-              >
-                <X className="mr-1 h-4 w-4" />
-                Clear filters
-              </Button>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+              {hasActiveFilters && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                  className="h-9"
+                >
+                  <X className="mr-1 h-4 w-4" />
+                  Clear filters
+                </Button>
+              )}
+              {selectionMode ? (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={handleGroupSelected}
+                    disabled={selected.size < 2 || isGrouping}
+                    className="h-9"
+                  >
+                    <Layers className="mr-1 h-4 w-4" />
+                    Group {selected.size > 0 ? `(${selected.size})` : ""}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={exitSelectionMode}
+                    className="h-9"
+                  >
+                    Cancel
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSelectionMode(true)}
+                  className="h-9"
+                >
+                  <Layers className="mr-1 h-4 w-4" />
+                  Group expenses
+                </Button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-baseline justify-between gap-2 border-t pt-3 text-sm">
@@ -347,6 +437,7 @@ export function TransactionTable({
           <Table>
             <TableHeader>
               <TableRow>
+                {selectionMode && <TableHead className="w-8" />}
                 <TableHead>Date</TableHead>
                 <TableHead>Merchant</TableHead>
                 <TableHead>Amount</TableHead>
@@ -357,14 +448,30 @@ export function TransactionTable({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filtered.map((t) => (
-                <TransactionRow
-                  key={t.id}
-                  transaction={t}
-                  categories={categories}
-                  knownCounterparties={knownCounterparties}
-                />
-              ))}
+              {displayRows.map((row) =>
+                row.kind === "group" ? (
+                  <GroupRow
+                    key={row.groupId}
+                    groupId={row.groupId}
+                    members={row.members}
+                    categories={categories}
+                    knownCounterparties={knownCounterparties}
+                    selectionMode={selectionMode}
+                    selected={selected}
+                    onToggleSelected={toggleSelected}
+                  />
+                ) : (
+                  <TransactionRow
+                    key={row.transaction.id}
+                    transaction={row.transaction}
+                    categories={categories}
+                    knownCounterparties={knownCounterparties}
+                    selectionMode={selectionMode}
+                    selected={selected.has(row.transaction.id)}
+                    onToggleSelected={toggleSelected}
+                  />
+                )
+              )}
             </TableBody>
           </Table>
         )}
@@ -377,10 +484,18 @@ function TransactionRow({
   transaction: t,
   categories,
   knownCounterparties,
+  selectionMode = false,
+  selected = false,
+  onToggleSelected,
+  nested = false,
 }: {
   transaction: Transaction;
   categories: { name: string; subcategories: { id: string; name: string }[] }[];
   knownCounterparties: string[];
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelected?: (id: string) => void;
+  nested?: boolean;
 }) {
   const [editing, setEditing] = useState(false);
   const [merchant, setMerchant] = useState(t.merchant);
@@ -438,7 +553,18 @@ function TransactionRow({
 
   return (
     <TableRow className={t.is_cc_payment ? "opacity-50" : ""}>
-      <TableCell>
+      {selectionMode && (
+        <TableCell className="w-8">
+          {!nested && (
+            <Checkbox
+              checked={selected}
+              onCheckedChange={() => onToggleSelected?.(t.id)}
+              aria-label={`Select transaction to ${t.merchant}`}
+            />
+          )}
+        </TableCell>
+      )}
+      <TableCell className={nested ? "pl-8 text-muted-foreground" : ""}>
         {new Date(t.date).toLocaleDateString("en-IN", {
           day: "2-digit",
           month: "short",
@@ -757,5 +883,117 @@ function TransactionRow({
         </Dialog>
       </TableCell>
     </TableRow>
+  );
+}
+
+function GroupRow({
+  groupId,
+  members,
+  categories,
+  knownCounterparties,
+  selectionMode,
+  selected,
+  onToggleSelected,
+}: {
+  groupId: string;
+  members: Transaction[];
+  categories: { name: string; subcategories: { id: string; name: string }[] }[];
+  knownCounterparties: string[];
+  selectionMode: boolean;
+  selected: Set<string>;
+  onToggleSelected: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const [isPending, startTransition] = useTransition();
+
+  const groupTotal = members
+    .filter((m) => !m.is_cc_payment)
+    .reduce((sum, m) => sum + txEffectiveSpend(m), 0);
+
+  const earliest = members.reduce((min, m) =>
+    new Date(m.date) < new Date(min.date) ? m : min
+  );
+  const merchants = Array.from(new Set(members.map((m) => m.merchant)));
+  const label =
+    merchants.length === 1
+      ? merchants[0]
+      : `${merchants[0]} +${merchants.length - 1} more`;
+  const needsReview = members.some((m) => m.needs_review);
+
+  function handleUngroup() {
+    startTransition(() => ungroupAll(groupId));
+  }
+
+  return (
+    <>
+      <TableRow className="bg-muted/40">
+        {selectionMode && <TableCell className="w-8" />}
+        <TableCell>
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="flex items-center gap-1 text-left"
+            aria-label={expanded ? "Collapse group" : "Expand group"}
+          >
+            {expanded ? (
+              <ChevronDown className="h-4 w-4" />
+            ) : (
+              <ChevronRight className="h-4 w-4" />
+            )}
+            {new Date(earliest.date).toLocaleDateString("en-IN", {
+              day: "2-digit",
+              month: "short",
+              year: "numeric",
+            })}
+          </button>
+        </TableCell>
+        <TableCell className="font-medium">
+          {label}
+          <Badge variant="secondary" className="ml-2 text-xs">
+            <Layers className="mr-1 h-3 w-3" />
+            {members.length} payments
+          </Badge>
+        </TableCell>
+        <TableCell className="font-medium">{formatINR(groupTotal)}</TableCell>
+        <TableCell>
+          <Badge variant="outline">{earliest.category}</Badge>
+        </TableCell>
+        <TableCell className="text-sm text-muted-foreground">
+          Grouped expense
+        </TableCell>
+        <TableCell>
+          {needsReview ? (
+            <Badge variant="destructive">Needs Review</Badge>
+          ) : (
+            <Badge variant="default">Verified</Badge>
+          )}
+        </TableCell>
+        <TableCell className="text-right">
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-8 w-8"
+            onClick={handleUngroup}
+            disabled={isPending}
+            title="Ungroup"
+          >
+            <Ungroup className="h-4 w-4" />
+          </Button>
+        </TableCell>
+      </TableRow>
+      {expanded &&
+        members.map((m) => (
+          <TransactionRow
+            key={m.id}
+            transaction={m}
+            categories={categories}
+            knownCounterparties={knownCounterparties}
+            selectionMode={selectionMode}
+            selected={selected.has(m.id)}
+            onToggleSelected={onToggleSelected}
+            nested
+          />
+        ))}
+    </>
   );
 }

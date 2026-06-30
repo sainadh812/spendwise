@@ -1,14 +1,17 @@
 import { defineConfig } from "prisma/config";
 
+const url = process.env.DATABASE_URL;
+
 export default defineConfig({
   schema: "prisma/schema.prisma",
   migrations: {
     path: "prisma/migrations",
   },
-  datasource: {
-    // process.env fallback lets `prisma generate` run during `npm install`
-    // even when DATABASE_URL isn't set (CI / Vercel install phase).
-    // The real URL is injected at build/runtime via the DATABASE_URL env var.
-    url: process.env.DATABASE_URL ?? "postgresql://placeholder:placeholder@localhost:5432/placeholder",
-  },
+  // Only include datasource when DATABASE_URL is available.
+  // During `npm install` (Vercel install phase) it is not set,
+  // so prisma generate runs without it — which is fine, generate
+  // does not connect to the database.
+  // During `npm run build` (Vercel build phase) it is set,
+  // so prisma migrate deploy can connect and run migrations.
+  ...(url ? { datasource: { url } } : {}),
 });

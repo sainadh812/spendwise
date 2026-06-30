@@ -1,8 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/process-emails",
-      "schedule": "30 18 * * *"
-    }
-  ]
+  "installCommand": "npm install --ignore-scripts",
+  "buildCommand": "prisma generate && prisma migrate deploy && node scripts/sync-categories.mjs && next build"
 }

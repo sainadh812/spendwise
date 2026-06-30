@@ -10,7 +10,6 @@
     "build": "prisma generate && prisma migrate deploy && node scripts/sync-categories.mjs && next build",
     "start": "next start -p 3003",
     "lint": "eslint",
-    "postinstall": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:backfill-categories": "node scripts/backfill-category-refs.mjs",

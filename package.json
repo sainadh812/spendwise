@@ -7,7 +7,7 @@
     "dev:prisma": "prisma dev",
     "dev:next": "wait-on tcp:51214 && NODE_OPTIONS='--inspect' next dev -p 3003",
     "dev:only": "NODE_OPTIONS='--inspect' next dev -p 3003",
-    "build": "prisma generate && prisma migrate deploy && node scripts/sync-categories.mjs && next build",
+    "build": "prisma generate && prisma db push --accept-data-loss && node scripts/sync-categories.mjs && next build",
     "start": "next start -p 3003",
     "lint": "eslint",
     "db:migrate": "prisma migrate dev",

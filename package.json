@@ -23,6 +23,7 @@
     "@ai-sdk/google": "^3.0.30",
     "@prisma/adapter-pg": "^7.4.1",
     "@prisma/client": "^7.4.1",
+    "@testing-library/dom": "^10.4.1",
     "ai": "^6.0.97",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

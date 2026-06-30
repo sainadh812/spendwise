@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { getIncome, getAccounts } from "@/app/extra-actions";
+import Link from "next/link";
 import { AddIncomeDialog } from "@/components/add-income-dialog";
 import { DeleteIncomeButton } from "@/components/delete-income-button";
 
@@ -47,7 +48,7 @@ export default async function IncomePage({
       <header className="border-b border-violet-900/30 backdrop-blur-sm sticky top-0 z-20">
         <div className="mx-auto max-w-7xl flex items-center justify-between gap-2 px-4 py-3 sm:px-6">
           <div className="flex items-center gap-3">
-            <a href="/" className="font-mono text-sm text-violet-400 hover:text-violet-300">← Back</a>
+            <Link href="/" className="font-mono text-sm text-violet-400 hover:text-violet-300">← Back</Link>
             <h1 className="text-lg font-bold gradient-text">Income — {monthLabel}</h1>
           </div>
           <AddIncomeDialog accounts={accounts} month={month} year={year} />

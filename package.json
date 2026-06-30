@@ -17,8 +17,7 @@
     "db:seed": "curl -X POST http://localhost:3003/api/seed",
     "db:sync-categories": "node scripts/sync-categories.mjs",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "postinstall": "prisma generate"
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.30",

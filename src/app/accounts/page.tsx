@@ -62,7 +62,7 @@ export default async function AccountsPage() {
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {accounts.map((acc) => {
+            {(accounts as {id:string;name:string;type:string;balance:number;currency:string}[]).map((acc) => {
               const colorClass = ACCOUNT_TYPE_COLORS[acc.type] ?? ACCOUNT_TYPE_COLORS.bank;
               const icon = ACCOUNT_TYPE_ICONS[acc.type] ?? "💰";
               const isPositive = acc.balance >= 0;

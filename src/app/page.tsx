@@ -8,6 +8,7 @@ import {
   getTotalOutstanding,
   getKnownCounterparties,
 } from "./actions";
+import { getNetWorth } from "./extra-actions";
 import { effectiveSpend } from "@/lib/recoverable";
 import { OutstandingCard } from "@/components/outstanding-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -33,6 +34,10 @@ function formatINR(value: number) {
   }).format(value);
 }
 
+const ACCOUNT_TYPE_ICON: Record<string, string> = {
+  bank: "🏦", cash: "💵", credit_card: "💳", investment: "📈", wallet: "👛",
+};
+
 export default async function Dashboard({
   searchParams,
 }: {
@@ -55,6 +60,7 @@ export default async function Dashboard({
     budget,
     outstanding,
     knownCounterparties,
+    netWorthData,
   ] = await Promise.all([
     getTransactions(month, year),
     getCategoriesWithSubs(),
@@ -62,6 +68,7 @@ export default async function Dashboard({
     getBudgetForMonth(month, year),
     getTotalOutstanding(),
     getKnownCounterparties(),
+    getNetWorth(),
   ] as const);
 
   const spendingTxns = transactions
@@ -69,15 +76,10 @@ export default async function Dashboard({
     .map((t) => ({ t, effective: effectiveSpend(t) }))
     .filter((entry) => entry.effective > 0);
 
-  const totalSpend = spendingTxns.reduce(
-    (sum, entry) => sum + entry.effective,
-    0
-  );
-
+  const totalSpend = spendingTxns.reduce((sum, entry) => sum + entry.effective, 0);
   const totalTransactions = spendingTxns.length;
   const pendingReviews = transactions.filter((t) => t.needs_review).length;
-  const avgTransaction =
-    totalTransactions > 0 ? totalSpend / totalTransactions : 0;
+  const avgTransaction = totalTransactions > 0 ? totalSpend / totalTransactions : 0;
 
   const serialized = transactions.map((t) => ({
     ...t,
@@ -93,8 +95,6 @@ export default async function Dashboard({
     })),
   }));
 
-  // For charts, use the effective spend amount so recoverables don't inflate
-  // category/day totals. Fully-recovered transactions are filtered out.
   const chartData = transactions
     .map((t) => ({
       id: t.id,
@@ -115,12 +115,16 @@ export default async function Dashboard({
   }));
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6 sm:py-4">
-          <div className="flex items-center gap-2 sm:gap-6">
+    <div className="min-h-screen">
+      {/* ─── Header ─────────────────────────────────────────────────────── */}
+      <header className="border-b border-violet-900/30 backdrop-blur-sm sticky top-0 z-20">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-3 sm:px-6">
+          <div className="flex items-center gap-3 sm:gap-6">
             <NavBar />
-              <h1 className="text-lg font-bold sm:text-xl md:hidden">Expense Tracker</h1>
+            {/* Logo */}
+            <div className="md:hidden">
+              <span className="text-lg font-bold glitch gradient-text">SpendWise</span>
+            </div>
           </div>
           <div className="flex items-center gap-1.5 sm:gap-3">
             <SetBudgetDialog
@@ -128,12 +132,7 @@ export default async function Dashboard({
               year={year}
               currentBudget={
                 budget
-                  ? {
-                      id: budget.id,
-                      amount: budget.amount,
-                      start_month: budget.start_month,
-                      start_year: budget.start_year,
-                    }
+                  ? { id: budget.id, amount: budget.amount, start_month: budget.start_month, start_year: budget.start_year }
                   : null
               }
             />
@@ -144,9 +143,14 @@ export default async function Dashboard({
                 await signOut({ redirectTo: "/login" });
               }}
             >
-              <Button variant="outline" size="sm" type="submit">
+              <Button
+                variant="outline"
+                size="sm"
+                type="submit"
+                className="border-violet-500/30 text-[#9381c4] hover:text-violet-300 hover:border-violet-400/50"
+              >
                 <span className="hidden sm:inline">Sign Out</span>
-                <span className="sm:hidden">Exit</span>
+                <span className="sm:hidden">✕</span>
               </Button>
             </form>
           </div>
@@ -154,128 +158,129 @@ export default async function Dashboard({
       </header>
 
       <main className="mx-auto max-w-7xl space-y-6 px-4 py-6 sm:px-6">
+
+        {/* ─── Logo + Month ──────────────────────────────────────────────── */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
+            <h1 className="text-2xl font-bold glitch gradient-text hidden md:block">SpendWise</h1>
             <MonthSwitcher month={month} year={year} />
-            <p className="text-sm text-muted-foreground">
-              Monthly spending overview
-            </p>
+            <p className="text-sm text-[#9381c4]">Monthly spending overview</p>
           </div>
           {process.env.NODE_ENV !== "production" && <SeedButton />}
         </div>
 
+        {/* ─── Accounts Strip ───────────────────────────────────────────── */}
+        {netWorthData.accounts.length > 0 && (
+          <div className="flex gap-3 overflow-x-auto pb-1 scrollable">
+            {/* Net Worth pill */}
+            <a href="/accounts" className="flex-shrink-0 rounded-xl px-4 py-3 bg-gradient-to-br from-violet-900/60 to-violet-800/20 border border-violet-500/30 hover:border-violet-400/60 transition-all sweep-hover">
+              <p className="text-xs font-mono text-[#9381c4] uppercase whitespace-nowrap">Net Worth</p>
+              <p className="text-lg font-bold stat-value whitespace-nowrap">{formatINR(netWorthData.total)}</p>
+            </a>
+            {netWorthData.accounts.slice(0, 4).map(acc => (
+              <a key={acc.id} href="/accounts"
+                className="flex-shrink-0 rounded-xl px-4 py-3 bg-[#0d0b1e] border border-violet-900/30 hover:border-violet-500/40 transition-all sweep-hover">
+                <p className="text-xs font-mono text-[#9381c4] uppercase whitespace-nowrap">
+                  {ACCOUNT_TYPE_ICON[acc.type] ?? "💰"} {acc.name}
+                </p>
+                <p className={`text-lg font-bold whitespace-nowrap ${acc.balance >= 0 ? "stat-income" : "stat-expense"}`}>
+                  {formatINR(acc.balance)}
+                </p>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {/* ─── Stat Cards ───────────────────────────────────────────────── */}
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Card>
+          <Card className="card-glow">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Total Monthly Spend
-              </CardTitle>
+              <CardTitle className="text-xs font-mono text-[#9381c4] uppercase tracking-widest">Total Spend</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatINR(totalSpend)}</p>
-              <p className="text-xs text-muted-foreground">
-                Excludes credit card payments
-              </p>
+              <p className="text-2xl font-bold stat-expense">{formatINR(totalSpend)}</p>
+              <p className="text-xs text-[#9381c4]">Excl. CC payments</p>
             </CardContent>
           </Card>
 
-          {budget && (
-            <BudgetCard budget={budget.amount} spent={totalSpend} />
-          )}
+          {budget && <BudgetCard budget={budget.amount} spent={totalSpend} />}
 
-          <Card>
+          <Card className="card-glow">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Transactions
-              </CardTitle>
+              <CardTitle className="text-xs font-mono text-[#9381c4] uppercase tracking-widest">Transactions</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{totalTransactions}</p>
-              <p className="text-xs text-muted-foreground">This month</p>
+              <p className="text-2xl font-bold stat-value">{totalTransactions}</p>
+              <p className="text-xs text-[#9381c4]">This month</p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="card-glow">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                Avg Transaction
-              </CardTitle>
+              <CardTitle className="text-xs font-mono text-[#9381c4] uppercase tracking-widest">Avg. Transaction</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-2xl font-bold">{formatINR(avgTransaction)}</p>
-              <p className="text-xs text-muted-foreground">Per transaction</p>
+              <p className="text-2xl font-bold stat-value">{formatINR(avgTransaction)}</p>
+              <p className="text-xs text-[#9381c4]">Per transaction</p>
             </CardContent>
           </Card>
 
           {!budget && (
-            <Card>
+            <Card className="card-glow">
               <CardHeader className="pb-2">
-                <CardTitle className="text-sm font-medium text-muted-foreground">
-                  Pending Reviews
-                </CardTitle>
+                <CardTitle className="text-xs font-mono text-[#9381c4] uppercase tracking-widest">Pending Review</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-2xl font-bold">{pendingReviews}</p>
-                <p className="text-xs text-muted-foreground">
-                  Need your attention
+                <p className="text-2xl font-bold" style={{ color: pendingReviews > 0 ? "#fbbf24" : "#34d399", textShadow: pendingReviews > 0 ? "0 0 12px rgba(251,191,36,.5)" : "0 0 12px rgba(52,211,153,.5)" }}>
+                  {pendingReviews}
                 </p>
+                <p className="text-xs text-[#9381c4]">Need attention</p>
               </CardContent>
             </Card>
           )}
         </div>
 
         {outstanding.total > 0 && (
-          <OutstandingCard
-            total={outstanding.total}
-            counterpartyCount={outstanding.counterpartyCount}
-          />
+          <OutstandingCard total={outstanding.total} counterpartyCount={outstanding.counterpartyCount} />
         )}
 
+        {/* ─── Charts ───────────────────────────────────────────────────── */}
         <div className="grid gap-6 lg:grid-cols-2">
           <CategoryPieChart transactions={chartData} />
           <DailyBarChart transactions={chartData} />
         </div>
 
-        <Separator />
+        <Separator className="bg-violet-900/30" />
 
+        {/* ─── Tabs ─────────────────────────────────────────────────────── */}
         <Tabs defaultValue="reviews">
-          <TabsList className="w-full">
-            <TabsTrigger value="reviews">
+          <TabsList className="w-full bg-[#140f2a] border border-violet-900/30">
+            <TabsTrigger value="reviews" className="data-[state=active]:bg-violet-900/40 data-[state=active]:text-violet-300">
               <span className="sm:hidden">Reviews</span>
               <span className="hidden sm:inline">Pending Reviews</span>
             </TabsTrigger>
-            <TabsTrigger value="all">
+            <TabsTrigger value="all" className="data-[state=active]:bg-violet-900/40 data-[state=active]:text-violet-300">
               <span className="sm:hidden">All</span>
               <span className="hidden sm:inline">All Transactions</span>
             </TabsTrigger>
-            <TabsTrigger value="skipped">
+            <TabsTrigger value="skipped" className="data-[state=active]:bg-violet-900/40 data-[state=active]:text-violet-300">
               <span className="sm:hidden">Skipped</span>
               <span className="hidden sm:inline">Skipped Emails</span>
               {serializedSkipped.length > 0 && (
-                <span className="ml-1 rounded-full bg-muted px-1.5 py-0.5 text-xs">
+                <span className="ml-1 rounded-full bg-violet-900/60 px-1.5 py-0.5 text-xs text-violet-300">
                   {serializedSkipped.length}
                 </span>
               )}
             </TabsTrigger>
           </TabsList>
           <TabsContent value="reviews" className="mt-4">
-            <PendingReviews
-              transactions={serialized}
-              categories={categories}
-            />
+            <PendingReviews transactions={serialized} categories={categories} />
           </TabsContent>
           <TabsContent value="all" className="mt-4">
-            <TransactionTable
-              transactions={serialized}
-              categories={categories}
-              knownCounterparties={knownCounterparties}
-            />
+            <TransactionTable transactions={serialized} categories={categories} knownCounterparties={knownCounterparties} />
           </TabsContent>
           <TabsContent value="skipped" className="mt-4">
-            <SkippedEmails
-              skippedEmails={serializedSkipped}
-              categories={categories}
-            />
+            <SkippedEmails skippedEmails={serializedSkipped} categories={categories} />
           </TabsContent>
         </Tabs>
       </main>

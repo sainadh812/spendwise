@@ -7,50 +7,156 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── Accounts (Bagels-style) ───────────────────────────────────────────────
+model Account {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  type         String   @default("bank") // bank | cash | credit_card | investment | wallet
+  balance      Float    @default(0)
+  currency     String   @default("INR")
+  is_hidden    Boolean  @default(false)
+  color        String?  // hex for UI badge
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  transactions Transaction[]
+  incomes      Income[]
+  transfers_from Transfer[] @relation("TransferFrom")
+  transfers_to   Transfer[] @relation("TransferTo")
+}
+
+// ─── People (Bagels split tracking) ───────────────────────────────────────
+model Person {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  created_at DateTime @default(now())
+
+  splits SplitEntry[]
+}
+
+// ─── Categories (hierarchical, unchanged) ─────────────────────────────────
 model Category {
-  id        String     @id @default(uuid())
-  name      String
-  parentId  String?
-  parent    Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children  Category[] @relation("CategoryHierarchy")
+  id       String     @id @default(uuid())
+  name     String
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
 
   transactionsAsCategory    Transaction[] @relation("TransactionCategory")
   transactionsAsSubcategory Transaction[] @relation("TransactionSubcategory")
+  incomeCategory            Income[]      @relation("IncomeCategory")
 
   @@unique([name, parentId])
 }
 
+// ─── Transactions (expenses) ───────────────────────────────────────────────
 model Transaction {
-  id                  String      @id @default(uuid())
-  amount              Float
-  merchant            String
-  date                DateTime
-  category            String
-  categoryId          String?
-  subcategoryId       String?
-  categoryRef         Category?   @relation("TransactionCategory", fields: [categoryId], references: [id])
-  subcategoryRef      Category?   @relation("TransactionSubcategory", fields: [subcategoryId], references: [id])
-  is_cc_payment       Boolean     @default(false)
-  confidence_score    Float
-  needs_review        Boolean     @default(true)
-  email_message_id    String?     @unique
-  remarks             String?
-  source              String      @default("email")
-  recoverable_amount  Float?
-  counterparty        String?
-  recovery_status     String?
-  group_id            String?
-  repayments          Repayment[]
-  created_at          DateTime    @default(now())
-  updated_at          DateTime    @updatedAt
+  id                 String      @id @default(uuid())
+  amount             Float
+  merchant           String
+  date               DateTime
+  category           String
+  categoryId         String?
+  subcategoryId      String?
+  categoryRef        Category?   @relation("TransactionCategory", fields: [categoryId], references: [id])
+  subcategoryRef     Category?   @relation("TransactionSubcategory", fields: [subcategoryId], references: [id])
+  accountId          String?
+  account            Account?    @relation(fields: [accountId], references: [id])
+  is_cc_payment      Boolean     @default(false)
+  confidence_score   Float       @default(1.0)
+  needs_review       Boolean     @default(false)
+  email_message_id   String?     @unique
+  remarks            String?
+  source             String      @default("manual") // manual | email | template | import
+  recoverable_amount Float?
+  counterparty       String?
+  recovery_status    String?
+  group_id           String?
+  repayments         Repayment[]
+  splits             SplitEntry[]
+  created_at         DateTime    @default(now())
+  updated_at         DateTime    @updatedAt
 
   @@index([amount, merchant, date], name: "idx_dedup")
   @@index([categoryId])
   @@index([subcategoryId])
   @@index([recovery_status, counterparty])
   @@index([group_id])
+  @@index([accountId])
 }
 
+// ─── Income (Bagels income mode) ──────────────────────────────────────────
+model Income {
+  id          String    @id @default(uuid())
+  amount      Float
+  source      String    // salary | freelance | investment | gift | other
+  description String?
+  date        DateTime
+  categoryId  String?
+  categoryRef Category? @relation("IncomeCategory", fields: [categoryId], references: [id])
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id])
+  is_recurring Boolean  @default(false)
+  created_at  DateTime  @default(now())
+  updated_at  DateTime  @updatedAt
+
+  @@index([date])
+  @@index([accountId])
+}
+
+// ─── Templates (Bagels recurring) ─────────────────────────────────────────
+model Template {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  amount       Float
+  merchant     String
+  category     String
+  categoryId   String?
+  subcategoryId String?
+  accountId    String?
+  type         String   @default("expense") // expense | income
+  frequency    String?  // daily | weekly | monthly | yearly | null=manual
+  notes        String?
+  shortcut_key String?  // number key 1–9 for quick-add
+  use_count    Int      @default(0)
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+}
+
+// ─── Transfers (Bagels transfer) ──────────────────────────────────────────
+model Transfer {
+  id         String   @id @default(uuid())
+  amount     Float
+  from_id    String
+  to_id      String
+  from       Account  @relation("TransferFrom", fields: [from_id], references: [id])
+  to         Account  @relation("TransferTo",   fields: [to_id],   references: [id])
+  date       DateTime
+  notes      String?
+  created_at DateTime @default(now())
+  updated_at DateTime @updatedAt
+
+  @@index([from_id])
+  @@index([to_id])
+  @@index([date])
+}
+
+// ─── Split entries (Bagels people splits) ─────────────────────────────────
+model SplitEntry {
+  id             String      @id @default(uuid())
+  transaction_id String
+  transaction    Transaction @relation(fields: [transaction_id], references: [id], onDelete: Cascade)
+  person_id      String
+  person         Person      @relation(fields: [person_id], references: [id])
+  amount         Float
+  settled        Boolean     @default(false)
+  created_at     DateTime    @default(now())
+
+  @@index([transaction_id])
+  @@index([person_id])
+}
+
+// ─── Repayments (recoverable tracking) ────────────────────────────────────
 model Repayment {
   id             String      @id @default(uuid())
   transaction_id String
@@ -63,6 +169,7 @@ model Repayment {
   @@index([transaction_id])
 }
 
+// ─── Budget ───────────────────────────────────────────────────────────────
 model Budget {
   id          String   @id @default(uuid())
   amount      Float
@@ -75,6 +182,7 @@ model Budget {
   @@index([start_year, start_month])
 }
 
+// ─── Skipped emails ───────────────────────────────────────────────────────
 model SkippedEmail {
   id               String   @id @default(uuid())
   email_message_id String   @unique
@@ -86,22 +194,23 @@ model SkippedEmail {
   created_at       DateTime @default(now())
 }
 
+// ─── AI Insights ──────────────────────────────────────────────────────────
 model Insight {
-  id                     String   @id @default(uuid())
-  period_type            String
-  period_key             String
-  month                  Int?
-  year                   Int
-  stats                  Json
-  summary                String
-  trends                 Json
-  anomalies              Json
-  suggestions            Json
-  tx_count_at_generation Int
+  id                      String   @id @default(uuid())
+  period_type             String
+  period_key              String
+  month                   Int?
+  year                    Int
+  stats                   Json
+  summary                 String
+  trends                  Json
+  anomalies               Json
+  suggestions             Json
+  tx_count_at_generation  Int
   tx_latest_at_generation DateTime
-  model                  String   @default("gemini-2.5-pro")
-  created_at             DateTime @default(now())
-  updated_at             DateTime @updatedAt
+  model                   String   @default("gemini-2.5-pro")
+  created_at              DateTime @default(now())
+  updated_at              DateTime @updatedAt
 
   @@unique([period_type, period_key])
   @@index([year, month])
